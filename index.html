@@ -243,6 +243,22 @@ const GROUPS = [
       {label:"摩擦係数",hint:"歯面摩擦。フレッティングせん断 ≈ μ·面圧。FFDP に効き寿命が下がる。",
        eff:"摩擦↑ → FFDP↑ → フレッティング係数↓ → 寿命↓"}),
   ]},
+  { en:"Life anchor (optional)", ja:"寿命アンカー（任意）", items:[
+    { kind:"coef", key:"anchor", unit:"", sym:"",
+      en:{label:"Calibrate to a test point",hint:"Pick the observed failure channel of one measured test (mode + load direction). The model then scales that channel's S-N intercept so its predicted life hits your point, turning relative trends into absolute cycles. Off = generic S-N."},
+      ja:{label:"試験点に較正",hint:"実測した試験の破壊系統（モード＋荷重方向）を選択。モデルはその系統の S-N 切片を調整し、予測寿命が実測点に一致するようにして、相対傾向を絶対サイクル数に変換する。オフ＝一般 S-N。"},
+      options:[ {id:"off",en:"off (generic S-N)",ja:"オフ（一般 S-N）",set:{anchor_mode:"off"}},
+                {id:"tu",en:"tooth, unidirectional",ja:"歯・片方向",set:{anchor_mode:"tooth",anchor_dir:"uni"}},
+                {id:"tb",en:"tooth, bidirectional",ja:"歯・両方向",set:{anchor_mode:"tooth",anchor_dir:"bi"}},
+                {id:"su",en:"shaft, unidirectional",ja:"軸・片方向",set:{anchor_mode:"shaft",anchor_dir:"uni"}},
+                {id:"sb",en:"shaft, bidirectional",ja:"軸・両方向",set:{anchor_mode:"shaft",anchor_dir:"bi"}} ] },
+    slider("anchor_T",200,8000,50,"N*m","T_test",
+      {label:"Test torque",hint:"Peak torque applied in the calibration test.",eff:"↑ test torque at fixed test life → stronger implied S-N → ↑ predicted life"},
+      {label:"試験トルク",hint:"較正試験で負荷したピークトルク。",eff:"試験寿命一定で試験トルク↑ → 強い S-N → 予測寿命↑"}),
+    slider("anchor_N",1000,2000000,1000,"cyc","N_test",
+      {label:"Test life (cycles)",hint:"Cycles to failure observed in that test.",eff:"↑ observed cycles → higher S-N intercept → ↑ predicted life"},
+      {label:"試験寿命（サイクル）",hint:"その試験で観測した破壊までのサイクル数。",eff:"観測サイクル↑ → S-N 切片↑ → 予測寿命↑"}),
+  ]},
 ];
 
 const CHARTS = [
@@ -259,17 +275,17 @@ const CHARTS = [
     en:["Predicted life (S-N)","Cycles to failure vs torque, both modes, both directions. Lowest curve governs. Bidirectional reverses the stress, so its curves sit left (shorter life). Green = current torque."],
     ja:["予測寿命（S-N）","破壊までのサイクル数 vs トルク。両モード・両方向。最下の曲線が支配。両方向は応力が交番するため左側（短寿命）。緑=現在トルク。"] },
   { id:"goodman", eq:"&sigma;_a/&sigma;_e + &sigma;_m/&sigma;_u = 1",
-    en:["Why bidirectional is worse (Goodman)","Each of the four dots is the current load state of one mode &times; direction: <b style='color:#2563eb'>blue</b> = tooth unidirectional, <b style='color:#dc2626'>red</b> = tooth bidirectional, <b style='color:#1e40af'>dark blue</b> = shaft unidirectional, <b style='color:#991b1b'>dark red</b> = shaft bidirectional. Uni (0&rarr;T) sits on the a=m diagonal (low amplitude, high tensile mean); bi (&minus;T&rarr;T) sits on the amplitude axis (double amplitude, zero mean). A dot above its mode's strength line (green = tooth, black = shaft) means that mode fails."],
-    ja:["両方向が厳しい理由（Goodman）","4つの点はそれぞれ、あるモード&times;方向の現在の荷重状態です：<b style='color:#2563eb'>青</b>=歯・片方向、<b style='color:#dc2626'>赤</b>=歯・両方向、<b style='color:#1e40af'>濃青</b>=軸・片方向、<b style='color:#991b1b'>濃赤</b>=軸・両方向。片方向（0&rarr;T）は a=m の対角線上（低振幅・高引張平均）、両方向（&minus;T&rarr;T）は振幅軸上（振幅倍・平均ゼロ）。点がそのモードの強さ線（緑=歯、黒=軸）を超えると、そのモードが破壊します。"] },
+    en:["Mean-stress diagram (Goodman)","Each of the four dots is the current load state of one mode &times; direction: <b style='color:#2563eb'>blue</b> = tooth unidirectional, <b style='color:#dc2626'>red</b> = tooth bidirectional, <b style='color:#1e40af'>dark blue</b> = shaft unidirectional, <b style='color:#991b1b'>dark red</b> = shaft bidirectional. Uni (0&rarr;T) sits on the a=m diagonal (low amplitude, high tensile mean); bi (&minus;T&rarr;T) sits on the amplitude axis (double amplitude, zero mean). A dot above its mode's strength line (green = tooth, black = shaft) means that mode fails."],
+    ja:["平均応力線図（Goodman）","4つの点はそれぞれ、あるモード&times;方向の現在の荷重状態です：<b style='color:#2563eb'>青</b>=歯・片方向、<b style='color:#dc2626'>赤</b>=歯・両方向、<b style='color:#1e40af'>濃青</b>=軸・片方向、<b style='color:#991b1b'>濃赤</b>=軸・両方向。片方向（0&rarr;T）は a=m の対角線上（低振幅・高引張平均）、両方向（&minus;T&rarr;T）は振幅軸上（振幅倍・平均ゼロ）。点がそのモードの強さ線（緑=歯、黒=軸）を超えると、そのモードが破壊します。"] },
   { id:"stressVsT", eq:"tooth 6q&middot;h&middot;K_f/(r&middot;n&middot;s&sup2;)  |  shaft K_t&middot;16T/&pi;d&sup3;",
     en:["Stress vs torque per mode","Linear build-up. Whichever line hits its strength (dashed) first, at lower torque, is the weak mode. Green = current torque."],
     ja:["モード別 応力 vs トルク","線形的な立ち上がり。より低いトルクで強さ（破線）に先に達する線が弱いモード。緑=現在トルク。"] },
   { id:"fretting", eq:"FFDP = &sigma;_t &middot; (&mu;p) &middot; &delta;_slip",
-    en:["Fretting initiation site","FFDP = Fretting Fatigue Damage Parameter: the surface tangential stress &sigma;_t, the frictional shear &mu;&middot;p, and the slip amplitude &delta;, multiplied together (a Ruiz-type damage index). Normalized shapes here: pressure peaks at the bite edge, slip grows toward the far end; their product (red, the FFDP) peaks where a fretting crack is most likely to nucleate."],
-    ja:["フレッティング起点","FFDP = フレッティング疲労損傷パラメータ：表面接線応力 &sigma;_t、摩擦せん断 &mu;&middot;p、すべり振幅 &delta; の積（Ruiz 型の損傷指標）。本図の正規化形状：面圧はバイト端で最大、すべりは遠端に向かい増加。その積（赤＝FFDP）が最大の位置でフレッティングクラックが最も発生しやすい。"] },
+    en:["Fretting initiation site","FFDP = Fretting Fatigue Damage Parameter: the surface tangential stress &sigma;_t, the frictional shear &mu;&middot;p, and the slip amplitude &delta;, multiplied together (a Ruiz-type damage index). Pressure peaks at the bite edge while slip grows toward the far end; their product (red) peaks in between, and the dashed red line marks that predicted crack-initiation site. Each curve is normalized to its own peak, so this plot shows only the location of damage — friction &mu; and slip &delta; scale the FFDP magnitude (reported as &Phi; in the panel, which sets the fretting factors), not its shape, so they do not move these curves."],
+    ja:["フレッティング起点","FFDP = フレッティング疲労損傷パラメータ：表面接線応力 &sigma;_t、摩擦せん断 &mu;&middot;p、すべり振幅 &delta; の積（Ruiz 型の損傷指標）。面圧はバイト端で最大、すべりは遠端に向かい増加し、その積（赤）は中間で最大。赤い破線がその予測クラック発生位置。各曲線は自身の最大値で正規化しているため、本図は損傷の位置のみを示す — 摩擦 &mu; とすべり &delta; は FFDP の大きさ（パネルの &Phi;、フレッティング係数を決める）を変えるが形状は変えないため、これらの曲線は動かない。"] },
   { id:"bursting", eq:"&sigma;_hoop = p&middot;(R&sup2;+r&sup2;)/(R&sup2;&minus;r&sup2;),  p &prop; W_t&middot;tan&alpha;",
-    en:["Sleeve bursting vs torque (pressure angle)","Where pressure angle matters: the radial split W_r = W_t&middot;tan&alpha; pressurizes the rim, and the Lam&eacute; hoop at the bore grows with &alpha; and with a thinner wall (bigger bore). Crossing the endurance line (green) risks a hoop split. Green = current torque."],
-    ja:["スリーブ拡張 vs トルク（圧力角）","圧力角が効く場所：半径分力 W_r = W_t&middot;tan&alpha; がリムを内圧し、内径のラメ・フープ応力が &alpha; とともに（また内径が大きく肉薄なほど）増加。耐久限線（緑）を超えるとフープ割れの懸念。緑=現在トルク。"] },
+    en:["Sleeve bursting vs torque","The radial split W_r = W_t&middot;tan&alpha; pressurizes the rim, and the Lam&eacute; hoop at the bore grows with &alpha; and with a thinner wall (bigger bore). Crossing the endurance line (green) risks a hoop split. Green = current torque."],
+    ja:["スリーブ拡張 vs トルク","半径分力 W_r = W_t&middot;tan&alpha; がリムを内圧し、内径のラメ・フープ応力が &alpha; とともに（また内径が大きく肉薄なほど）増加。耐久限線（緑）を超えるとフープ割れの懸念。緑=現在トルク。"] },
 ];
 
 const GOVT = { en:{teeth:"TEETH (tangential)", shaft:"SHAFT (radial-inward)"},
@@ -280,11 +296,11 @@ const GOVT = { en:{teeth:"TEETH (tangential)", shaft:"SHAFT (radial-inward)"},
 const fnum = (x,d=2)=> (x==null||!isFinite(x)) ? "–" : Number(x).toFixed(d);
 const DERIVED = [
   { sym:"m", v:R=>fnum(R.module,3)+" mm",
-    en:{k:"module",f:"m = PCD / N",c:"Derived; the spline is sized by its pitch diameter."},
-    ja:{k:"モジュール",f:"m = PCD / N",c:"従属値。スプラインは基準円径で寸法が決まる。"} },
+    en:{k:"module",f:"m = PCD / N",c:"The tooth size. The spline is set by its pitch diameter, so the module follows from the tooth count."},
+    ja:{k:"モジュール",f:"m = PCD / N",c:"歯の大きさ。スプラインは基準円径で決まるため、モジュールは歯数から従属する。"} },
   { sym:"n_c", v:R=>fnum(R.n_c,0),
-    en:{k:"engaged teeth",f:"n_c = (engaged% / 100) × N",c:"Assumes the engaged teeth share load equally."},
-    ja:{k:"かみあい歯数",f:"n_c = (かみあい% / 100) × N",c:"かみあう歯が均等に分担すると仮定。"} },
+    en:{k:"engaged teeth",f:"n_c = (engaged% / 100) × N",c:"Teeth actually carrying load; assumed to share it equally."},
+    ja:{k:"かみあい歯数",f:"n_c = (かみあい% / 100) × N",c:"実際に荷重を担う歯数。均等分担と仮定。"} },
   { sym:"s_F", v:R=>fnum(R.s_base,2)+" mm",
     en:{k:"root thickness",
         f:s=>s.sbase_mode==="manual"?"entered manually":"2·r_root·(s_p/2r + invα − inv α_root),  r_root = r − h_work",
@@ -308,9 +324,9 @@ const DERIVED = [
         c:"荷重線までの曲げ腕。歯先が最悪、基準円が分布接触の標準。"} },
   { sym:"K_f", v:R=>fnum(R.Kf,2),
     en:{k:"tooth fillet K_f",f:"Dolan–Broghamer  H + (s_F/r_f)^L (s_F/h_F)^M",
-        c:"H,L,M anchored to 20–25° gear data and extrapolated to the spline pressure angle — approximate; confirm with FE if it governs."},
+        c:"Stress-concentration factor at the tooth-root fillet under bending; it multiplies the nominal root stress. The H,L,M coefficients are anchored to 20–25° gear teeth and extrapolated to the spline pressure angle — approximate; confirm with FE if teeth govern."},
     ja:{k:"歯元 K_f",f:"Dolan–Broghamer  H + (s_F/r_f)^L (s_F/h_F)^M",
-        c:"H,L,M は20–25°歯車データに基づきスプライン圧力角へ外挿 — 近似。支配的なら FE で確認。"} },
+        c:"曲げ時の歯元すみ肉の応力集中係数。公称歯元応力に乗じる。H,L,M は20–25°歯車に基づきスプライン圧力角へ外挿 — 近似。歯が支配的なら FE で確認。"} },
   { sym:"K_t", v:R=>fnum(R.Kt,2),
     en:{k:"shaft root K_t",
         f:s=>s.Kt_mode==="auto"?"1 + 2√(h_work/r_f)·0.62   [Neuber]":"entered manually",
@@ -340,8 +356,8 @@ const DERIVED = [
         f:s=>s.b_mode==="manual"?"手動入力":"−⅓·log10(2f)，f = Shigley 係数(UTS)",
         c:"推定のみ。可能なら実測 S-N 勾配を使用。"} },
   { sym:"&beta;", v:R=>fnum(R.beta,4)+" /mm",
-    en:{k:"decay rate β",f:"β = √(k_θ (1/GJ_s + 1/GJ_g)),  k_θ = n_c·c_p·r²",c:""},
-    ja:{k:"減衰率 β",f:"β = √(k_θ (1/GJ_s + 1/GJ_g)),  k_θ = n_c·c_p·r²",c:""} },
+    en:{k:"decay rate β",f:"β = √(k_θ (1/GJ_s + 1/GJ_g)),  k_θ = n_c·c_p·r²",c:"How fast the transferred load falls along the engagement; larger β = sharper concentration at the bite edge."},
+    ja:{k:"減衰率 β",f:"β = √(k_θ (1/GJ_s + 1/GJ_g)),  k_θ = n_c·c_p·r²",c:"伝達荷重がかみあい方向に減衰する速さ。β が大きいほど端への集中が鋭い。"} },
   { sym:"1/&beta;", v:R=>fnum(R.oneOverBeta,1)+" mm",
     en:{k:"decay length",f:"1 / β",c:"Only ~3/β of the engagement actually carries load."},
     ja:{k:"減衰長さ",f:"1 / β",c:"荷重を担うのは約 3/β 分だけ。"} },
@@ -352,8 +368,8 @@ const DERIVED = [
     en:{k:"stiffness ratio",f:"GJ_g / GJ_s",c:"The more compliant member sets how sharply load concentrates."},
     ja:{k:"剛性比",f:"GJ_g / GJ_s",c:"柔らかい部材が集中の鋭さを決める。"} },
   { sym:"L*", v:R=>fnum(R.xUni,0)+" mm",
-    en:{k:"crossover (uni)",f:"L* where tooth cap = shaft cap (uni)",c:""},
-    ja:{k:"遷移長さ（片）",f:"歯耐力 = 軸耐力 となる L*（片）",c:""} },
+    en:{k:"crossover (uni)",f:"L* where tooth cap = shaft cap (uni)",c:"Effective length at which the failure mode switches from teeth to shaft (unidirectional)."},
+    ja:{k:"遷移長さ（片）",f:"歯耐力 = 軸耐力 となる L*（片）",c:"破壊モードが歯から軸へ切り替わる有効長さ（片方向）。"} },
   { sym:"L*", v:R=>fnum(R.xBi,0)+" mm",
     en:{k:"crossover (bi)",f:"L* where tooth cap = shaft cap (bi)",c:"Between L*(bi) and L*(uni) the two directions fail in different modes."},
     ja:{k:"遷移長さ（両）",f:"歯耐力 = 軸耐力 となる L*（両）",c:"L*(両)〜L*(片) の間は2方向で破壊モードが異なる。"} },
@@ -375,15 +391,21 @@ const DERIVED = [
   { sym:"", v:(R,L)=>GOVT[L][R.govBi], cls:R=>R.govBi==="shaft"?"bad":"warn",
     en:{k:"governs (bi)",f:"lowest-capacity mode at the current L_eff",c:""},
     ja:{k:"支配モード（両）",f:"現在の L_eff で最小耐力のモード",c:""} },
+  { sym:"", v:R=> state.anchor_mode==="off" ? "off" : (state.anchor_mode==="tooth"?R.cal_tooth:R.cal_shaft).toFixed(2)+"×",
+    cls:R=> state.anchor_mode==="off"?"":"good",
+    en:{k:"S-N calibration",f:"σ'_f scaled to hit your anchor point",
+        c:s=>s.anchor_mode==="off"?"No test anchor set — life is from the generic S-N. Set one in the Life anchor group.":"Multiplier on the anchored channel's life that makes the model match your measured point."},
+    ja:{k:"S-N 較正",f:"σ'_f をアンカー点に一致させる倍率",
+        c:s=>s.anchor_mode==="off"?"試験アンカー未設定 — 寿命は一般 S-N から。寿命アンカー群で設定。":"アンカー系統の寿命に乗じ、モデルを実測点に一致させる倍率。"} },
   { sym:"N_f", v:R=>eng(R.lifeUni)+" cyc", cls:R=>R.lifeUni<1e5?"bad":"good",
-    en:{k:"life @T (uni)",f:"N_f = ½(σ_ar/σ'_f)^(1/b)",c:"Relative trend is robust; absolute cycles await a test anchor."},
-    ja:{k:"寿命 @T（片）",f:"N_f = ½(σ_ar/σ'_f)^(1/b)",c:"相対傾向は確か。絶対値は試験較正待ち。"} },
+    en:{k:"life @T (uni)",f:"N_f = ½(σ_ar/σ'_f)^(1/b)",c:s=>anchorNote(s,"en")},
+    ja:{k:"寿命 @T（片）",f:"N_f = ½(σ_ar/σ'_f)^(1/b)",c:s=>anchorNote(s,"ja")} },
   { sym:"N_f", v:R=>eng(R.lifeBi)+" cyc", cls:R=>R.lifeBi<1e5?"bad":"good",
-    en:{k:"life @T (bi)",f:"N_f = ½(σ_ar/σ'_f)^(1/b)",c:"Relative trend is robust; absolute cycles await a test anchor."},
-    ja:{k:"寿命 @T（両）",f:"N_f = ½(σ_ar/σ'_f)^(1/b)",c:"相対傾向は確か。絶対値は試験較正待ち。"} },
+    en:{k:"life @T (bi)",f:"N_f = ½(σ_ar/σ'_f)^(1/b)",c:s=>anchorNote(s,"en")},
+    ja:{k:"寿命 @T（両）",f:"N_f = ½(σ_ar/σ'_f)^(1/b)",c:s=>anchorNote(s,"ja")} },
   { sym:"&sigma;_hoop", v:R=>fnum(R.hoopAtT,0)+" MPa", cls:R=>R.hoopAtT>R.sig_e?"bad":R.hoopAtT>0.5*R.sig_e?"warn":"good",
-    en:{k:"sleeve hoop @T",f:"σ_hoop = p(R²+r²)/(R²−r²),  p ∝ W_t·tanα",c:"Sleeve bursting — where pressure angle enters."},
-    ja:{k:"スリーブフープ @T",f:"σ_hoop = p(R²+r²)/(R²−r²),  p ∝ W_t·tanα",c:"スリーブ拡張 — 圧力角が効く場所。"} },
+    en:{k:"sleeve hoop @T",f:"σ_hoop = p(R²+r²)/(R²−r²),  p ∝ W_t·tanα",c:"Peak hoop tension at the sleeve bore from the radial tooth load; if it nears the endurance/UTS lines the rim can split."},
+    ja:{k:"スリーブフープ @T",f:"σ_hoop = p(R²+r²)/(R²−r²),  p ∝ W_t·tanα",c:"半径歯荷重による内径の最大フープ引張。耐久限/UTS 線に近づくとリムが割れうる。"} },
 ];
 
 /* sign of effect on LIFE when an input is INCREASED: +1 longer (green),
@@ -395,6 +417,7 @@ const LIFE_SIGN = {
   Kt:-1, UTS:+1, surf:+1, b:0,
   fret_anchor:+1, mxax_uni:+1, mxax_bi:+1,
   T:-1, slip0:-1, mu:-1,
+  anchor_T:+1, anchor_N:+1,
 };
 const EFFCLS = s => s>0 ? "up" : s<0 ? "down" : "neutral";
 
@@ -426,7 +449,7 @@ const STR = {
 };
 
 /* ===================== state + persistence ===================== */
-const LS_STATE="spline_explorer_state_v3", LS_LANG="spline_explorer_lang_v1";
+const LS_STATE="spline_explorer_state_v4", LS_LANG="spline_explorer_lang_v1";
 const DEFAULTS = {
   PCD:60, N:24, eng_pct:100, phi:30, L:40, r_fillet:0.45,
   hwork_mode:"auto", hwork_manual:2.25,
@@ -439,6 +462,7 @@ const DEFAULTS = {
   b_mode:"auto", b_manual:-0.085,
   fret_anchor:12, mxax_uni:1.0, mxax_bi:0.85,
   T:1500, slip0:0.6, mu:0.30,
+  anchor_mode:"off", anchor_dir:"uni", anchor_T:2500, anchor_N:1e6,
 };
 let state=Object.assign({},DEFAULTS), lang="en";
 try { const s=JSON.parse(localStorage.getItem(LS_STATE)); if(s&&typeof s==="object") Object.assign(state,s); } catch(e){}
@@ -448,8 +472,22 @@ function save(){ try{ localStorage.setItem(LS_STATE,JSON.stringify(state)); loca
 /* ===================== helpers ===================== */
 const C={blue:"#2563eb",red:"#dc2626",green:"#16a34a",gold:"#d97706",black:"#111827",gray:"#9ca3af",orange:"#ea580c"};
 function eng(v){ if(!isFinite(v))return"–"; if(v<1)return"<1"; if(v>=1e6)return(v/1e6).toFixed(v>=1e7?0:1)+"M"; if(v>=1e3)return(v/1e3).toFixed(v>=1e4?0:1)+"k"; return v.toFixed(0); }
-/* turn x_word into x<sub>word</sub> for DOM text (canvas labels use plain forms) */
+/* turn x_word into x<sub>word</sub> and x^pow into x<sup>pow</sup> for DOM text */
 function sub(s){ return s==null?s:String(s).replace(/_([A-Za-z0-9αβγθ,]*[A-Za-z0-9αβγθ])/g,"<sub>$1</sub>"); }
+function sup(s){ return s==null?s:String(s).replace(/\^\(([^)]+)\)/g,"<sup>$1</sup>").replace(/\^([A-Za-z0-9.]+)/g,"<sup>$1</sup>"); }
+function mf(s){ return sup(sub(s)); }   /* math format: subscripts + superscripts */
+function anchorNote(s,L){
+  if(s.anchor_mode==="off")
+    return L==="en"
+      ? "Absolute cycles are uncalibrated — set a Life anchor (a measured torque + cycles point) to pin the S-N height. Relative trends hold regardless."
+      : "絶対サイクル数は未較正 — 寿命アンカー（実測のトルク+サイクル点）を設定すると S-N の高さが固定される。相対傾向は較正なしでも有効。";
+  const dirEn=s.anchor_dir==="bi"?"bidirectional":"unidirectional", modeEn=s.anchor_mode;
+  const bEn=s.b_mode==="manual"?"your manual b":"the UTS estimate of b";
+  if(L==="en") return `Anchored to your test: ${s.anchor_T} N·m → ${eng(s.anchor_N)} cyc on the ${modeEn} (${dirEn}). That pins the S-N intercept σ'_f (the absolute life scale) for that channel; the slope b is still ${bEn} — add a second test point to fit b.`;
+  const dirJa=s.anchor_dir==="bi"?"両方向":"片方向", modeJa=s.anchor_mode==="tooth"?"歯":"軸";
+  const bJa=s.b_mode==="manual"?"手動の b":"UTS 推定の b";
+  return `試験に較正済み：${s.anchor_T} N·m → ${eng(s.anchor_N)} cyc（${modeJa}・${dirJa}）。その系統の S-N 切片 σ'_f（絶対寿命スケール）を固定。勾配 b は${bJa}のまま — 2点目で b を決定可能。`;
+}
 function txt(x){ return typeof x==="function" ? x(state) : x; }
 function coefCurrent(it){
   for(const o of it.options){ let ok=true; for(const k in o.set){ if(state[k]!==o.set[k]){ok=false;break;} } if(ok) return o.id; }
@@ -474,7 +512,7 @@ function buildUI(){
   GROUPS.forEach(g=>{
     const h=document.createElement("h2"); h.className="grp"; h.textContent=g[lang]; ctn.appendChild(h);
     g.items.forEach(it=>{
-      const L=it[lang], symHtml = it.sym?`<span class="sym">${it.sym}</span>`:"";
+      const L=it[lang], symHtml = it.sym?`<span class="sym">${sub(it.sym)}</span>`:"";
       const effHtml = L.eff?`<div class="eff ${EFFCLS(LIFE_SIGN[it.key]||0)}">${sub(L.eff)}</div>`:"";
       const d=document.createElement("div"); d.className="ctrl";
 
@@ -511,7 +549,7 @@ function buildUI(){
   CHARTS.forEach(c=>{
     const cap=c[lang][1];
     const card=document.createElement("div"); card.className="chart";
-    card.innerHTML=`<canvas id="cv_${c.id}"></canvas><div class="eq">${sub(c.eq)}</div><div class="cap">${sub(cap)}</div>`;
+    card.innerHTML=`<canvas id="cv_${c.id}"></canvas><div class="eq">${mf(c.eq)}</div><div class="cap">${sub(cap)}</div>`;
     chDiv.appendChild(card); CV[c.id]=card.querySelector("canvas");
   });
 }
@@ -539,10 +577,10 @@ function render(){
 
   document.getElementById("readout").innerHTML = DERIVED.map(item=>{
     const L=item[lang], cls=item.cls?item.cls(R):"";
-    const f=txt(L.f), c=txt(L.c), symHtml=item.sym?` <span class="sym">${item.sym}</span>`:"";
+    const f=txt(L.f), c=txt(L.c), symHtml=item.sym?` <span class="sym">${sub(item.sym)}</span>`:"";
     return `<div class="ro"><div class="k">${sub(L.k)}${symHtml}</div>`+
            `<div class="v ${cls}">${item.v(R,lang)}</div>`+
-           (f?`<div class="f">${sub(f)}</div>`:"")+
+           (f?`<div class="f">${mf(f)}</div>`:"")+
            (c?`<div class="c">${sub(c)}</div>`:"")+`</div>`;
   }).join("");
 

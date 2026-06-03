@@ -109,8 +109,8 @@
 
     const b_auto = -log10(2 * fFrac(p.UTS)) / 3;         // Basquin slope estimate
     const b = p.b_mode === "manual" ? p.b_manual : b_auto;
-    const SIGF_tooth = sig_e / Math.pow(2e6, b);
-    const SIGF_shaft = tau_e / Math.pow(2e6, b);
+    let SIGF_tooth = sig_e / Math.pow(2e6, b);
+    let SIGF_shaft = tau_e / Math.pow(2e6, b);
 
     // --- fretting knockdowns from the Ruiz FFDP ------------------------------
     // peak flank contact pressure (MPa) at the bite edge, and FFDP severity
@@ -121,7 +121,29 @@
     const fret_uni = 1 / (1 + ffdp / p.fret_anchor);                 // one flank reworked
     const fret_bi = 1 / (1 + 0.5 * ffdp / p.fret_anchor);            // damage split over two flanks
 
+    // --- optional life calibration to a measured test point ------------------
+    // one (torque, cycles, mode, direction) point pins the S-N intercept sig'_f
+    // for that channel (the absolute life scale). The slope b is unchanged.
+    let cal_tooth = 1, cal_shaft = 1;
+    if (p.anchor_mode === "tooth" || p.anchor_mode === "shaft") {
+      const am = p.anchor_mode, ad = p.anchor_dir, Ta = p.anchor_T * 1000;
+      const speak = am === "tooth"
+        ? (6 * h_load * Kf / (r * n_c * s_base * s_base * Leff)) * Ta
+        : (Kt * 16 / (PI * Math.pow(p.d_root, 3))) * Ta;
+      const knock = ad === "bi" ? (am === "tooth" ? fret_bi : p.mxax_bi)
+                                : (am === "tooth" ? fret_uni : p.mxax_uni);
+      const su = am === "tooth" ? p.UTS : tau_u;
+      let sar = ad === "uni" ? (speak / 2) / Math.max(1e-6, 1 - (speak / 2) / su) : speak;
+      sar /= knock;
+      const sigfA = am === "tooth" ? SIGF_tooth : SIGF_shaft;
+      const NfRaw = sar >= sigfA ? 0.5 : 0.5 * Math.pow(sar / sigfA, 1 / b);
+      const cal = Math.max(1e-6, p.anchor_N / NfRaw);   // desired life multiplier
+      if (am === "tooth") { SIGF_tooth *= Math.pow(cal, -b); cal_tooth = cal; }
+      else { SIGF_shaft *= Math.pow(cal, -b); cal_shaft = cal; }
+    }
+
     return {
+      cal_tooth, cal_shaft,
       // geometry
       PCD, N, r, module, pitch, n_c, h_work, s_base, h_load, D_load,
       r_fillet: p.r_fillet, d_root: p.d_root,
@@ -272,6 +294,7 @@
         beta: R.beta, oneOverBeta: R.oneOverBeta, Leff: R.Leff, q_peak,
         surf: R.surf, b: R.b, sig_e: R.sig_e, tau_e: R.tau_e, tau_u: R.tau_u,
         ffdp: R.ffdp, press_peak: R.press_peak, fret_uni: R.fret_uni, fret_bi: R.fret_bi,
+        cal_tooth: R.cal_tooth, cal_shaft: R.cal_shaft,
         xUni, xBi, govUni, govBi, lifeUni, lifeBi,
         toothCapUni: capTooth(R, R.Leff, "uni"), toothCapBi: capTooth(R, R.Leff, "bi"),
         shaftCapUni: capShaft(R, "uni"), shaftCapBi: capShaft(R, "bi"),
