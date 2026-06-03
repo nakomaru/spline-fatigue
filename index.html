@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spline torsional-fatigue explorer</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --ink:#1c2330; --mut:#6b7280; --line:#e3e6ea;
+          --blue:#2563eb; --red:#dc2626; --green:#16a34a; --gold:#d97706; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.5 system-ui,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",sans-serif; color:var(--ink); background:var(--bg); }
+  header { padding:12px 18px; background:#fff; color:var(--ink); border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:16px; } header .sub { margin:4px 0 0; color:var(--mut); font-size:12px; }
+  header .btns { display:flex; gap:8px; }
+  header button { font:12px system-ui; padding:6px 11px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:6px; cursor:pointer; }
+  header button:hover { background:#eef2ff; }
+  .layout { display:grid; grid-template-columns:340px 1fr; gap:14px; padding:14px; align-items:start; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .panel.sticky { position:sticky; top:14px; max-height:calc(100vh - 28px); overflow:auto; }
+  h2.grp { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--mut);
+           margin:14px 0 6px; border-bottom:1px solid var(--line); padding-bottom:3px; }
+  .ctrl { margin:9px 0; }
+  .ctrl label { display:flex; justify-content:space-between; font-size:12px; gap:8px; }
+  .ctrl label .nm { font-weight:600; } .ctrl label .un { color:var(--mut); white-space:nowrap; }
+  .ctrl label .sym { color:var(--blue); font-family:"Cambria Math",Georgia,serif; font-weight:600; margin-left:5px; }
+  .ro .k .sym, .chart .cap .sym { color:var(--blue); font-family:"Cambria Math",Georgia,serif; }
+  .ctrl .row { display:flex; gap:6px; align-items:center; }
+  .ctrl input[type=range] { flex:1; }
+  .ctrl input[type=number] { width:74px; font:12px monospace; padding:2px 4px; border:1px solid var(--line); border-radius:4px; }
+  .ctrl .hint { color:var(--mut); font-size:11px; margin-top:2px; }
+  .ctrl .eff { font-size:11px; font-weight:600; margin-top:2px; }
+  .ctrl .eff.up { color:#15803d; }      /* raising this slider → longer life */
+  .ctrl .eff.down { color:#b91c1c; }    /* raising this slider → shorter life */
+  .ctrl .eff.neutral { color:#6b7280; } /* little or mixed effect on life */
+  .modal-bg { position:fixed; inset:0; background:rgba(8,12,22,0.55); display:none; align-items:center; justify-content:center; z-index:50; }
+  .modal-bg.show { display:flex; }
+  .modal { background:#fff; border-radius:12px; padding:18px 20px; max-width:380px; width:90%; box-shadow:0 18px 50px rgba(0,0,0,0.3); }
+  .modal h3 { margin:0 0 8px; font-size:15px; }
+  .modal p { margin:0 0 16px; color:#374151; font-size:13px; }
+  .modal .actions { display:flex; gap:8px; justify-content:flex-end; }
+  .modal button { font:13px system-ui; padding:7px 14px; border-radius:7px; cursor:pointer; border:1px solid var(--line); }
+  .modal button.cancel { background:#fff; color:var(--ink); }
+  .modal button.cancel:hover { background:#f3f4f6; }
+  .modal button.confirm { background:#dc2626; color:#fff; border-color:#dc2626; }
+  .modal button.confirm:hover { background:#b91c1c; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:8px; }
+  .ro { background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .ro .k { font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--mut); }
+  .ro .v { font-size:16px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--ink); }
+  .ro .v.warn { color:#b45309; } .ro .v.bad { color:#b91c1c; } .ro .v.good { color:#15803d; }
+  .story { background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:9px 11px; margin-top:10px; font-size:12.5px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(370px,1fr)); gap:14px; margin-top:14px; }
+  .chart { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 10px 10px; }
+  .chart canvas { width:100%; height:230px; display:block; }
+  .chart .cap { font-size:11.5px; color:#374151; margin-top:6px; }
+  .chart .eq { font-family:"Cambria Math",Georgia,serif; background:#f1f5f9; border-radius:5px;
+               padding:3px 6px; display:inline-block; margin-top:5px; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <div><h1 id="appTitle"></h1><div class="sub" id="appSub"></div></div>
+  <div class="btns"><button id="lang"></button><button id="reset"></button></div>
+</header>
+
+<div class="layout">
+  <div class="panel sticky" id="controls"></div>
+  <div>
+    <div class="panel">
+      <div class="readout" id="readout"></div>
+      <div class="story" id="story"></div>
+    </div>
+    <div class="grid" id="charts"></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3 id="modalTitle"></h3>
+    <p id="modalMsg"></p>
+    <div class="actions">
+      <button class="cancel" id="modalCancel"></button>
+      <button class="confirm" id="modalConfirm"></button>
+    </div>
+  </div>
+</div>
+
+<script src="physics.js"></script>
+<script src="plot.js"></script>
+<script>
+"use strict";
+
+/* ===================== parameter definitions (bilingual) ===================== */
+/* item tuple: [key,min,max,step,def,unit, en_label,en_hint, ja_label,ja_hint, en_effect,ja_effect] */
+const GROUPS = [
+  { en:"Spline teeth", ja:"歯部", items:[
+    ["PCD",30,120,0.5,60,"mm",
+      "Pitch circle dia PCD","Pitch diameter of the spline; radius r = PCD/2 carries the torque. Module m = PCD/N is derived (shown above). Larger PCD → larger r and, at fixed N, a coarser module (bigger teeth).",
+      "基準円直径 PCD","スプラインの基準円直径。半径 r = PCD/2 がトルクを伝えます。モジュール m = PCD/N は従属値（上に表示）。PCD が大きいほど r が大きく、N 一定ならモジュールも大きく（歯が大きく）なります。",
+      "↑ PCD → bigger radius & teeth → lower tooth force → ↑ life","PCD↑ → 半径・歯が大 → 歯面力↓ → 寿命↑"],
+    ["N",10,60,1,24,"",
+      "Tooth count N","Teeth at the fixed PCD; module m = PCD/N. At 100% engagement all N teeth share the load, so each carries proportionally less (∝1/N), which cancels their smaller section — tooth bending stress is nearly flat in N. The only residual: more teeth stiffen the coupling (k_θ ∝ N), shortening L_eff and concentrating the load, so stress rises mildly (~√N).",
+      "歯数 N","固定 PCD の歯数。モジュール m = PCD/N。かみあい率 100% では全 N 枚が荷重を分担し、1歯あたりは比例して軽く (∝1/N) なり、歯断面が小さくなる効果と相殺 — 歯元曲げ応力は N にほぼ依存しません。唯一の残効果：歯数が多いほど結合が剛くなり (k_θ ∝ N)、L_eff が縮んで荷重が集中し、応力が緩やかに (~√N) 上がります。",
+      "↑ N → load shared by more, smaller teeth (cancels); mild ↓ life via stiffer mesh","N↑ → 多くの小さい歯で分担（相殺）；結合剛性増で緩やかに寿命↓"],
+    ["eng_pct",20,100,1,100,"%",
+      "Teeth engaged %","Fraction of the N teeth actually sharing load. Ideally 100%; pitch/index error or misalignment drops it. Engaged count n_c = % × N is shown above. Fewer engaged → higher load on each → higher stress.",
+      "かみあい率 %","N 枚のうち実際に荷重を分担する割合。理想は 100%。ピッチ・割出誤差や芯ずれで低下。かみあい歯数 n_c = % × N は上に表示。少ないほど1歯荷重↑ → 応力↑。",
+      "↑ engagement → more teeth share → lower per-tooth load → ↑ life","かみあい率↑ → 分担歯数↑ → 1歯荷重↓ → 寿命↑"],
+    ["phi",14.5,45,0.5,30,"deg",
+      "Pressure angle","Angle of the line of action. Splits flank-normal load into tangential (W_t, carries torque) and radial (W_r = W_t·tan α, pushes the sleeve open). It does NOT change tooth-bending or shaft-torsion life here, but it drives the sleeve bursting (and flank contact) — see the bursting chart.",
+      "圧力角","作用線の角度。歯面法線力を接線 (W_t, トルク伝達) と半径 (W_r = W_t·tan α, スリーブを押し広げる) に分けます。本ツールの歯曲げ・軸ねじり寿命は変えませんが、スリーブ拡張（と歯面接触）に効きます（拡張グラフ参照）。",
+      "↑ α → more radial load → higher sleeve bursting (see bursting chart)","α↑ → 半径荷重↑ → スリーブ拡張↑（拡張グラフ参照）"],
+    ["sbase_factor",0.3,0.8,0.01,0.5,"",
+      "Tooth base thk / pitch","Root thickness as a fraction of circular pitch. Bending/shear strength grows with thickness², so chunkier teeth resist tooth-off.",
+      "歯元厚 / ピッチ","周ピッチに対する歯元の厚さの比。曲げ・せん断強さは厚さの2乗で増えるため、厚い歯ほど歯欠けに強い。",
+      "↑ thickness → stronger teeth → ↑ tooth life","厚さ↑ → 歯が丈夫 → 歯の寿命↑"],
+    ["hwork_factor",0.4,1.4,0.05,0.9,"",
+      "Working height / module","Radial contact height ÷ module. Taller contact spreads bearing load but lengthens the bending lever.",
+      "有効歯丈 / モジュール","半径方向の接触高さ÷モジュール。高いほど面圧は分散しますが、曲げのレバーが長くなります。",
+      "↑ height → longer bending lever → ↓ tooth life","歯丈↑ → 曲げレバー長 → 歯の寿命↓"],
+    ["hload_factor",0.2,0.9,0.05,0.5,"",
+      "Load arm / working ht","Height of the resultant flank load above the root, as a fraction of working height. Longer lever → more root bending.",
+      "荷重腕 / 有効歯丈","歯元から見た合力作用点の高さ（有効歯丈に対する比）。レバーが長いほど歯元曲げが増えます。",
+      "↑ arm → more root bending → ↓ tooth life","腕↑ → 歯元曲げ↑ → 歯の寿命↓"],
+  ]},
+  { en:"Load spread (shear-lag)", ja:"荷重分布（シアラグ）", items:[
+    ["L",8,90,0.5,40,"mm",
+      "Engagement length L","Physical overlap of the splines. Only the first ~3/β of it actually carries load (see L_eff).",
+      "かみあい長さ L","スプラインの重なり長さ。実際に荷重を担うのは端から約 3/β までです（L_eff 参照）。",
+      "↑ L → ↑ L_eff up to the 1/β plateau → ↑ tooth life","L↑ → 1/β の頭打ちまで L_eff↑ → 歯の寿命↑"],
+    ["cp",2,40,0.5,14,"N/mm/um",
+      "Mesh stiffness c_p","How stiffly teeth resist tangential give per mm of length. THE driver of load concentration: higher c_p → shorter decay length 1/β → load bunches at the bite edge.",
+      "かみあい剛性 c_p","単位長さあたり、歯が接線方向のたわみにどれだけ抵抗するか。荷重集中の最大要因：c_p が大きいほど減衰長さ 1/β が短くなり、荷重が端に集中します。",
+      "↑ c_p → load bunches (↓ L_eff) → ↓ tooth life","c_p↑ → 荷重集中（L_eff↓）→ 歯の寿命↓"],
+    ["d_root",20,90,0.1,57,"mm",
+      "Shaft spline root dia","The shaft's torsional cross-section (and its stiffness GJ_s). Shaft shear = 16T/(πd³), so small changes move the shaft-inward capacity strongly; a stiffer shaft also spreads the load.",
+      "軸スプライン歯底径","軸のねじり断面（および剛性 GJ_s）。軸のせん断応力 = 16T/(πd³) で、わずかな変化で軸内向きの耐力が大きく動きます。軸が剛いほど荷重も分散します。",
+      "↑ dia → lower shaft stress → ↑ shaft life (failure shifts to teeth)","径↑ → 軸応力↓ → 軸の寿命↑（破壊は歯側へ）"],
+    ["sleeve_OD",40,160,0.5,95,"mm",
+      "Sleeve OD","Outer diameter of the side gear/sleeve, setting its torsional stiffness GJ. In shear-lag the COMPLIANT member drives concentration, so a stiffer sleeve actually spreads the load more evenly (lowers β).",
+      "スリーブ外径","サイドギア/スリーブの外径でねじり剛性 GJ を決めます。シアラグでは柔らかい部材が集中を生むため、スリーブが剛いほど荷重はむしろ均一に分散します（β が下がる）。",
+      "↑ OD → stiffer sleeve → lower β → ↑ L_eff (load spreads)","外径↑ → スリーブ剛性↑ → β↓ → L_eff↑（荷重分散）"],
+    ["sleeve_bore",25,100,0.5,58,"mm",
+      "Sleeve bore","Inner (internal-spline minor) diameter. A bigger bore thins the wall → softer sleeve → that compliant member raises β → load concentrates (shorter L_eff). Also thins the rim for bursting.",
+      "スリーブ内径","内歯スプラインの歯先円直径。内径が大きいほど肉厚が薄く柔らかくなり、その柔らかい部材が β を上げて荷重が集中します（L_eff↓）。拡張に対するリムも薄くなります。",
+      "↑ bore → softer/thinner sleeve → ↓ L_eff & ↑ bursting","内径↑ → スリーブ柔・薄 → L_eff↓・拡張↑"],
+    ["G",60000,90000,1000,80000,"MPa",
+      "Shear modulus G","Steel ≈ 80 GPa. Enters every torsional stiffness GJ; β ∝ 1/√G, so stiffer members spread the load.",
+      "横弾性係数 G","鋼は約 80 GPa。すべてのねじり剛性 GJ に含まれ、β ∝ 1/√G。剛い部材ほど荷重が分散します。",
+      "↑ G → stiffer members → smaller β → ↑ L_eff (load spreads)","G↑ → 部材剛性↑ → β↓ → L_eff↑（荷重分散）"],
+  ]},
+  { en:"Stress concentration", ja:"応力集中", items:[
+    ["Kt",1,5,0.05,3.0,"",
+      "Shaft root K_t (torsion)","Stress-concentration at the shaft spline-root fillet under torsion. Multiplies nominal shaft shear — the main lever on shaft-inward cracking.",
+      "軸歯底 K_t（ねじり）","ねじりによる軸スプライン歯底すみ肉の応力集中。公称せん断応力に乗り、軸内向き亀裂の主要因です。",
+      "↑ K_t → ↑ shaft stress → ↓ shaft life (favors shaft-inward)","K_t↑ → 軸応力↑ → 軸の寿命↓（軸内向き有利）"],
+    ["Kf",1,4,0.05,2.0,"",
+      "Tooth fillet K_f (bending)","Stress-concentration at the tooth-root fillet under bending. Multiplies tooth bending stress.",
+      "歯元 K_f（曲げ）","曲げによる歯元すみ肉の応力集中。歯の曲げ応力に乗ります。",
+      "↑ K_f → ↑ tooth stress → ↓ tooth life","K_f↑ → 歯応力↑ → 歯の寿命↓"],
+  ]},
+  { en:"Material", ja:"材料", items:[
+    ["UTS",800,2200,10,1500,"MPa",
+      "Tensile strength UTS","Ultimate strength. All fatigue strengths scale from it (endurance ≈ 0.42·UTS bending, 0.29·UTS torsion).",
+      "引張強さ UTS","引張強さ。すべての疲労強さがこれに比例（耐久限 ≈ 曲げ 0.42·UTS、ねじり 0.29·UTS）。",
+      "↑ UTS → stronger material → ↑ life (all modes)","UTS↑ → 材料が強い → 寿命↑（全モード）"],
+    ["surf",0.4,1.0,0.01,0.85,"",
+      "Surface/size factor","Surface-finish and size knockdown on the endurance limit. Rougher/bigger → lower.",
+      "表面・寸法係数","表面粗さと寸法による耐久限の低下。粗い/大きいほど低い。",
+      "↑ factor → better surface/size → higher endurance → ↑ life","係数↑ → 表面・寸法が良 → 耐久限↑ → 寿命↑"],
+    ["b",-0.14,-0.04,0.005,-0.085,"",
+      "Basquin exponent b","Slope of the S-N line. More negative → life drops faster as load rises.",
+      "Basquin 指数 b","S-N 線の勾配。負に大きいほど、荷重増加で寿命が急速に下がります。",
+      "more negative → steeper S-N → life more load-sensitive","負に大 → S-N が急 → 寿命が荷重に敏感"],
+  ]},
+  { en:"Direction knockdowns", ja:"方向別の低減係数", items:[
+    ["fret_uni",0.2,1.0,0.05,0.40,"",
+      "Fretting factor (uni)","Unidirectional re-works the same flank spot every cycle, with a tensile mean — worst for fretting crack initiation.",
+      "フレッティング係数（片方向）","片方向は毎サイクル同じ歯面の一点を繰り返し、引張の平均応力も加わるため、クラック発生に最も厳しい。",
+      "↑ value → less fretting damage → ↑ life","値↑ → フレッティング損傷↓ → 寿命↑"],
+    ["fret_bi",0.2,1.0,0.05,0.55,"",
+      "Fretting factor (bi)","Bidirectional splits the damage over two flanks (half the cycles each).",
+      "フレッティング係数（両方向）","両方向は損傷が両歯面に分散します（各サイクル数は半分）。",
+      "↑ value → less fretting damage → ↑ life","値↑ → フレッティング損傷↓ → 寿命↑"],
+    ["mxax_uni",0.6,1.0,0.05,1.00,"",
+      "Shaft multiaxial (uni)","One tensile plane in play.",
+      "軸の多軸係数（片方向）","引張面は1つだけ。",
+      "↑ value → stronger shaft → ↑ shaft life","値↑ → 軸が強い → 軸の寿命↑"],
+    ["mxax_bi",0.6,1.0,0.05,0.85,"",
+      "Shaft multiaxial (bi)","Reversed torsion activates two crossing 45° tensile planes, so the shaft's effective strength is lower.",
+      "軸の多軸係数（両方向）","交番ねじりは交差する2つの45°引張面を励起するため、軸の実効強さが低下します。",
+      "↑ value → stronger shaft → ↑ shaft life","値↑ → 軸が強い → 軸の寿命↑"],
+  ]},
+  { en:"Loading / fretting", ja:"荷重・フレッティング", items:[
+    ["T",200,8000,50,2500,"N*m",
+      "Peak torque T","Operating/test torque. The green markers on the stress/life/Goodman charts track it.",
+      "ピークトルク T","運転/試験トルク。応力・寿命・Goodman 図の緑マーカーが追従します。",
+      "↑ torque → ↑ stress → ↓ life (all modes)","トルク↑ → 応力↑ → 寿命↓（全モード）"],
+    ["slip0",0.05,3,0.05,0.6,"um",
+      "Peak micro-slip","Flank sliding amplitude (fretting); grows toward the low-load end.",
+      "最大微小すべり","歯面のすべり振幅（フレッティング）。低荷重端に向かって増加します。",
+      "↑ slip → more fretting energy (affects the fretting chart here)","すべり↑ → フレッティング大（本ツールではフレッティング図のみ）"],
+    ["mu",0.1,0.9,0.05,0.30,"",
+      "Friction coefficient","Flank friction; fretting shear ≈ μ·pressure.",
+      "摩擦係数","歯面の摩擦。フレッティングせん断 ≈ μ·面圧。",
+      "↑ friction → more fretting shear (affects the fretting chart here)","摩擦↑ → フレッティングせん断↑（本ツールではフレッティング図のみ）"],
+  ]},
+];
+
+const CHARTS = [
+  { id:"diffusion", eq:"q(x) = T&beta;&middot;cosh(&beta;(L&minus;x)) / sinh(&beta;L)",
+    en:["Load diffusion along engagement","Torque carried per mm of length. It peaks at the bite edge and decays over 1/&beta;. Sharper = the spline uses less of its length. Raise c_p or the stiffness mismatch to sharpen it."],
+    ja:["かみあい方向の荷重分布","単位長さあたりの伝達トルク。端（バイト縁）で最大となり 1/&beta; で減衰。鋭いほどスプラインの長さを使えていません。c_p や剛性差を上げると鋭くなります。"] },
+  { id:"leffVsL", eq:"L_eff = tanh(&beta;L) / &beta;",
+    en:["Effective length vs engagement length","Diminishing returns: past ~3/&beta; of length, adding spline does almost nothing. Gray = decay length 1/&beta;; green dot = current point."],
+    ja:["有効長さ vs かみあい長さ","収穫逓減：長さが約 3/&beta; を超えると、スプラインを追加してもほとんど効果がありません。グレー=減衰長さ 1/&beta;、緑点=現在点。"] },
+  { id:"modeComp", eq:"cap_tooth &prop; L_eff ;  cap_shaft = K_t&middot;16T/(&pi;d&sup3;)",
+    en:["Failure-mode competition","Tooth capacity rises with effective length; shaft torsion is flat. Where the curves cross = the band (gold). Green line = current L_eff. The lowest curve at L_eff is the failure mode."],
+    ja:["破壊モードの競合","歯の耐力は有効長さとともに上昇、軸のねじりは一定。交差点間が帯（金色）。緑線=現在の L_eff。L_eff で最も低い曲線が破壊モード。"] },
+  { id:"sn", eq:"N_f = &frac12;(&sigma;_ar / &sigma;'_f)^(1/b)",
+    en:["Predicted life (S-N)","Cycles to failure vs torque, both modes, both directions. Lowest curve governs. Bidirectional reverses the stress, so its curves sit left (shorter life). Green = current torque."],
+    ja:["予測寿命（S-N）","破壊までのサイクル数 vs トルク。両モード・両方向。最下の曲線が支配。両方向は応力が交番するため左側（短寿命）。緑=現在トルク。"] },
+  { id:"goodman", eq:"&sigma;_a/&sigma;_e + &sigma;_m/&sigma;_u = 1",
+    en:["Why bidirectional is worse (Goodman)","Each of the four dots is the current load state of one mode &times; direction: <b style='color:#2563eb'>blue</b> = tooth unidirectional, <b style='color:#dc2626'>red</b> = tooth bidirectional, <b style='color:#1e40af'>dark blue</b> = shaft unidirectional, <b style='color:#991b1b'>dark red</b> = shaft bidirectional. Uni (0&rarr;T) sits on the a=m diagonal (low amplitude, high tensile mean); bi (&minus;T&rarr;T) sits on the amplitude axis (double amplitude, zero mean). A dot above its mode's strength line (green = tooth, black = shaft) means that mode fails."],
+    ja:["両方向が厳しい理由（Goodman）","4つの点はそれぞれ、あるモード&times;方向の現在の荷重状態です：<b style='color:#2563eb'>青</b>=歯・片方向、<b style='color:#dc2626'>赤</b>=歯・両方向、<b style='color:#1e40af'>濃青</b>=軸・片方向、<b style='color:#991b1b'>濃赤</b>=軸・両方向。片方向（0&rarr;T）は a=m の対角線上（低振幅・高引張平均）、両方向（&minus;T&rarr;T）は振幅軸上（振幅倍・平均ゼロ）。点がそのモードの強さ線（緑=歯、黒=軸）を超えると、そのモードが破壊します。"] },
+  { id:"stressVsT", eq:"tooth 6q&middot;h&middot;K_f/(r&middot;n&middot;s&sup2;)  |  shaft K_t&middot;16T/&pi;d&sup3;",
+    en:["Stress vs torque per mode","Linear build-up. Whichever line hits its strength (dashed) first, at lower torque, is the weak mode. Green = current torque."],
+    ja:["モード別 応力 vs トルク","線形的な立ち上がり。より低いトルクで強さ（破線）に先に達する線が弱いモード。緑=現在トルク。"] },
+  { id:"fretting", eq:"FFDP = &sigma;_t &middot; (&mu;p) &middot; &delta;_slip",
+    en:["Fretting initiation site","FFDP = Fretting Fatigue Damage Parameter: the surface tangential stress &sigma;_t, the frictional shear &mu;&middot;p, and the slip amplitude &delta;, multiplied together (a Ruiz-type damage index). Normalized shapes here: pressure peaks at the bite edge, slip grows toward the far end; their product (red, the FFDP) peaks where a fretting crack is most likely to nucleate."],
+    ja:["フレッティング起点","FFDP = フレッティング疲労損傷パラメータ：表面接線応力 &sigma;_t、摩擦せん断 &mu;&middot;p、すべり振幅 &delta; の積（Ruiz 型の損傷指標）。本図の正規化形状：面圧はバイト端で最大、すべりは遠端に向かい増加。その積（赤＝FFDP）が最大の位置でフレッティングクラックが最も発生しやすい。"] },
+  { id:"bursting", eq:"&sigma;_hoop = p&middot;(R&sup2;+r&sup2;)/(R&sup2;&minus;r&sup2;),  p &prop; W_t&middot;tan&alpha;",
+    en:["Sleeve bursting vs torque (pressure angle)","Where pressure angle matters: the radial split W_r = W_t&middot;tan&alpha; pressurizes the rim, and the Lam&eacute; hoop at the bore grows with &alpha; and with a thinner wall (bigger bore). Crossing the endurance line (green) risks a hoop split. Green = current torque."],
+    ja:["スリーブ拡張 vs トルク（圧力角）","圧力角が効く場所：半径分力 W_r = W_t&middot;tan&alpha; がリムを内圧し、内径のラメ・フープ応力が &alpha; とともに（また内径が大きく肉薄なほど）増加。耐久限線（緑）を超えるとフープ割れの懸念。緑=現在トルク。"] },
+];
+
+const RO = [
+  { en:"module m = PCD/N", ja:"モジュール m = PCD/N", v:R=>R.module.toFixed(3)+" mm" },
+  { en:"engaged teeth n_c", ja:"かみあい歯数 n_c", v:R=>R.n_c.toFixed(0) },
+  { en:"β (decay rate)", ja:"β（減衰率）", v:R=>R.beta.toFixed(4)+" /mm" },
+  { en:"1/β (decay len)", ja:"1/β（減衰長さ）", v:R=>R.oneOverBeta.toFixed(1)+" mm" },
+  { en:"L_eff", ja:"有効長さ L_eff", v:R=>R.Leff.toFixed(1)+" mm", cls:()=>"good" },
+  { en:"stiffness ratio GJ_g/GJ_s", ja:"剛性比 GJ_g/GJ_s", v:R=>R.stiffRatio.toFixed(1)+"x" },
+  { en:"crossover L* (uni)", ja:"遷移長さ L*（片）", v:R=>(R.xUni?R.xUni.toFixed(0):"–")+" mm" },
+  { en:"crossover L* (bi)", ja:"遷移長さ L*（両）", v:R=>(R.xBi?R.xBi.toFixed(0):"–")+" mm" },
+  { en:"governs (uni)", ja:"支配モード（片）", v:(R,L)=>GOVT[L][R.govUni], cls:R=>R.govUni==="shaft"?"bad":"warn" },
+  { en:"governs (bi)", ja:"支配モード（両）", v:(R,L)=>GOVT[L][R.govBi], cls:R=>R.govBi==="shaft"?"bad":"warn" },
+  { en:"life @T (uni)", ja:"寿命 @T（片）", v:R=>eng(R.lifeUni)+" cyc", cls:R=>R.lifeUni<1e5?"bad":"good" },
+  { en:"life @T (bi)", ja:"寿命 @T（両）", v:R=>eng(R.lifeBi)+" cyc", cls:R=>R.lifeBi<1e5?"bad":"good" },
+  { en:"sleeve hoop @T", ja:"スリーブフープ応力 @T", v:R=>R.hoopAtT.toFixed(0)+" MPa", cls:R=>R.hoopAtT>R.sig_e?"bad":R.hoopAtT>0.5*R.sig_e?"warn":"good" },
+];
+
+const GOVT = { en:{teeth:"TEETH (tangential)", shaft:"SHAFT (radial-inward)"},
+               ja:{teeth:"歯（接線方向）", shaft:"軸（半径方向内向き）"} };
+
+/* sign of effect on LIFE when the slider is INCREASED: +1 longer (green),
+   -1 shorter (red), 0 little/mixed (neutral). Verified numerically. */
+const LIFE_SIGN = {
+  PCD:+1, N:-1, eng_pct:+1, phi:0, d_root:+1, sleeve_OD:+1, sleeve_bore:-1, L:+1,
+  sbase_factor:+1, hwork_factor:-1, hload_factor:-1,
+  cp:-1, G:+1,
+  Kt:-1, Kf:-1,
+  UTS:+1, surf:+1, b:0,
+  fret_uni:+1, fret_bi:+1, mxax_uni:+1, mxax_bi:+1,
+  T:-1, slip0:0, mu:0,
+};
+const EFFCLS = s => s>0 ? "up" : s<0 ? "down" : "neutral";
+
+const STR = {
+  en:{ title:"Spline torsional-fatigue explorer",
+       sub:"Drag any slider — every chart and number recomputes live. Settings are saved in this browser.",
+       reset:"Reset defaults", lang:"日本語",
+       modalTitle:"Reset to defaults?",
+       modalMsg:"This clears your saved settings and restores the generic defaults. Your language choice is kept.",
+       confirm:"Reset", cancel:"Cancel",
+       story:(R,inBand,below)=>`At L_eff = <b>${R.Leff.toFixed(1)} mm</b>, unidirectional fails by <b>${GOVT.en[R.govUni]}</b> and bidirectional by <b>${GOVT.en[R.govBi]}</b>. ` +
+         (inBand ? "You are <b>inside the band</b> where the two load directions fail differently." :
+          below ? "Both directions shear teeth (load too concentrated to load the shaft)." :
+                  "Both directions crack the shaft inward (load well spread).") +
+         ` Bidirectional life is about <b>${(R.lifeUni/Math.max(R.lifeBi,1)).toFixed(0)}x shorter</b> than unidirectional here.` },
+  ja:{ title:"スプラインねじり疲労エクスプローラ",
+       sub:"スライダーを動かすと、すべてのグラフと数値がリアルタイムに再計算。設定はこのブラウザに保存されます。",
+       reset:"既定値にリセット", lang:"English",
+       modalTitle:"既定値にリセットしますか？",
+       modalMsg:"保存した設定を消去し、一般的な既定値に戻します。言語設定は保持されます。",
+       confirm:"リセット", cancel:"キャンセル",
+       story:(R,inBand,below)=>`有効長さ L_eff = <b>${R.Leff.toFixed(1)} mm</b> では、片方向は<b>${GOVT.ja[R.govUni]}</b>、両方向は<b>${GOVT.ja[R.govBi]}</b>で破壊します。` +
+         (inBand ? "ここは2つの荷重方向で破壊モードが異なる<b>帯域の内側</b>です。" :
+          below ? "両方向とも歯がせん断破壊します（荷重が集中しすぎて軸に伝わらない）。" :
+                  "両方向とも軸が半径方向内向きに割れます（荷重がよく分散）。") +
+         `ここでは両方向の寿命は片方向の約 <b>${(R.lifeUni/Math.max(R.lifeBi,1)).toFixed(0)} 分の1</b> です。` },
+};
+
+/* ===================== state + persistence ===================== */
+const LS_STATE="spline_explorer_state_v2", LS_LANG="spline_explorer_lang_v1";
+const DEFAULTS={}; GROUPS.forEach(g=>g.items.forEach(it=>DEFAULTS[it[0]]=it[4]));
+let state=Object.assign({},DEFAULTS), lang="en";
+try { const s=JSON.parse(localStorage.getItem(LS_STATE)); if(s&&typeof s==="object") Object.assign(state,s); } catch(e){}
+const sl=localStorage.getItem(LS_LANG); if(sl==="en"||sl==="ja") lang=sl;
+function save(){ try{ localStorage.setItem(LS_STATE,JSON.stringify(state)); localStorage.setItem(LS_LANG,lang);}catch(e){} }
+
+/* ===================== helpers ===================== */
+const C={blue:"#2563eb",red:"#dc2626",green:"#16a34a",gold:"#d97706",black:"#111827",gray:"#9ca3af",orange:"#ea580c"};
+function eng(v){ if(!isFinite(v))return"–"; if(v<1)return"<1"; if(v>=1e6)return(v/1e6).toFixed(v>=1e7?0:1)+"M"; if(v>=1e3)return(v/1e3).toFixed(v>=1e4?0:1)+"k"; return v.toFixed(0); }
+/* turn x_word into x<sub>word</sub> for DOM text (canvas labels use plain forms) */
+function sub(s){ return s==null?s:String(s).replace(/_([A-Za-z0-9αβγθ]+)/g,"<sub>$1</sub>"); }
+
+/* symbol shown on the left next to each input, matching the chart/equation glyphs */
+const SYMS = {
+  PCD:"PCD", N:"N", eng_pct:"n<sub>c</sub>", phi:"&alpha;",
+  sbase_factor:"s<sub>base</sub>/p", hwork_factor:"h<sub>work</sub>/m", hload_factor:"h<sub>load</sub>/h<sub>work</sub>",
+  L:"L", cp:"c<sub>p</sub>", d_root:"d", sleeve_OD:"R<sub>o</sub>", sleeve_bore:"R<sub>i</sub>", G:"G",
+  Kt:"K<sub>t</sub>", Kf:"K<sub>f</sub>",
+  UTS:"&sigma;<sub>u</sub>", surf:"C<sub>surf</sub>", b:"b",
+  fret_uni:"k<sub>fr</sub>", fret_bi:"k<sub>fr</sub>", mxax_uni:"k<sub>ax</sub>", mxax_bi:"k<sub>ax</sub>",
+  T:"T", slip0:"&delta;", mu:"&mu;",
+};
+
+/* ===================== build UI (rebuilt on language switch) ===================== */
+const CV={};
+function buildUI(){
+  document.documentElement.lang = lang;
+  document.getElementById("appTitle").textContent = STR[lang].title;
+  document.getElementById("appSub").textContent = STR[lang].sub;
+  document.getElementById("reset").textContent = STR[lang].reset;
+  document.getElementById("lang").textContent = STR[lang].lang;
+  document.getElementById("modalTitle").textContent = STR[lang].modalTitle;
+  document.getElementById("modalMsg").textContent = STR[lang].modalMsg;
+  document.getElementById("modalConfirm").textContent = STR[lang].confirm;
+  document.getElementById("modalCancel").textContent = STR[lang].cancel;
+
+  const ctn=document.getElementById("controls"); ctn.innerHTML="";
+  GROUPS.forEach(g=>{
+    const h=document.createElement("h2"); h.className="grp"; h.textContent=g[lang]; ctn.appendChild(h);
+    g.items.forEach(it=>{
+      const [key,min,max,step,def,unit,enL,enH,jaL,jaH,enE,jaE]=it;
+      const label=lang==="en"?enL:jaL, hint=lang==="en"?enH:jaH, eff=lang==="en"?enE:jaE;
+      const d=document.createElement("div"); d.className="ctrl";
+      const symHtml = SYMS[key] ? `<span class="sym">${SYMS[key]}</span>` : "";
+      d.innerHTML=`<label><span class="nm">${label}${symHtml}</span><span class="un">${unit||""}</span></label>
+        <div class="row">
+          <input type="range" min="${min}" max="${max}" step="${step}" data-k="${key}">
+          <input type="number" min="${min}" max="${max}" step="${step}" data-k="${key}">
+        </div><div class="hint">${sub(hint||"")}</div><div class="eff ${EFFCLS(LIFE_SIGN[key]||0)}">${sub(eff||"")}</div>`;
+      ctn.appendChild(d);
+      const rng=d.querySelector("input[type=range]"), num=d.querySelector("input[type=number]");
+      rng.value=state[key]; num.value=state[key];
+      const on=e=>{ const v=parseFloat(e.target.value); if(!isFinite(v))return; state[key]=v; rng.value=v; num.value=v; save(); render(); };
+      rng.addEventListener("input",on); num.addEventListener("input",on);
+    });
+  });
+
+  const chDiv=document.getElementById("charts"); chDiv.innerHTML="";
+  CHARTS.forEach(c=>{
+    const [title,cap]=c[lang];
+    const card=document.createElement("div"); card.className="chart";
+    card.innerHTML=`<canvas id="cv_${c.id}"></canvas><div class="eq">${sub(c.eq)}</div><div class="cap">${sub(cap)}</div>`;
+    chDiv.appendChild(card); CV[c.id]=card.querySelector("canvas");
+  });
+}
+
+const modalBg=document.getElementById("modalBg");
+function openModal(){ modalBg.classList.add("show"); }
+function closeModal(){ modalBg.classList.remove("show"); }
+document.getElementById("reset").addEventListener("click", openModal);
+document.getElementById("modalCancel").addEventListener("click", closeModal);
+document.getElementById("modalConfirm").addEventListener("click",()=>{
+  state=Object.assign({},DEFAULTS);
+  try{ localStorage.removeItem(LS_STATE); }catch(e){}
+  closeModal(); buildUI(); render();
+});
+modalBg.addEventListener("click",e=>{ if(e.target===modalBg) closeModal(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });
+document.getElementById("lang").addEventListener("click",()=>{
+  lang = lang==="en"?"ja":"en"; save(); buildUI(); render();
+});
+
+/* ===================== render ===================== */
+function render(){
+  const out=Physics.computeAll(state), R=out.readout, ch=out.charts;
+  const TT={}; CHARTS.forEach(c=>TT[c.id]=c[lang][0]); // per-chart title on the canvas
+
+  document.getElementById("readout").innerHTML = RO.map(r=>{
+    const cls = r.cls? r.cls(R):"";
+    return `<div class="ro"><div class="k">${sub(r[lang])}</div><div class="v ${cls}">${r.v(R,lang)}</div></div>`;
+  }).join("");
+
+  const lo=Math.min(R.xBi||1e9,R.xUni||1e9), hi=Math.max(R.xBi||-1,R.xUni||-1);
+  const inBand = R.xBi&&R.xUni&&R.Leff>lo&&R.Leff<hi;
+  const below = R.Leff<lo;
+  document.getElementById("story").innerHTML = STR[lang].story(R,inBand,below);
+
+  drawPlot(CV.diffusion,{ title:TT.diffusion, xlabel:"x (mm), 0=bite", ylabel:"q (N·m/mm)",
+    series:[{x:ch.diffusion.xs,y:ch.diffusion.qx,color:C.blue,width:2,label:"q(x)"}],
+    bands:[{x0:0,x1:ch.diffusion.Leff,color:C.green}],
+    vlines:[{x:ch.diffusion.Leff,color:C.green,label:"Leff",dash:[5,3]}], ymin:0 });
+
+  drawPlot(CV.leffVsL,{ title:TT.leffVsL, xlabel:"L (mm)", ylabel:"length (mm)",
+    series:[{x:ch.leffVsL.Lgrid,y:ch.leffVsL.LeffVsL,color:C.blue,width:2,label:"Leff"},
+            {x:ch.leffVsL.Lgrid,y:ch.leffVsL.oneOverBetaLine,color:C.gray,width:1.5,dash:[5,3],label:"1/β"},
+            {x:ch.leffVsL.Lgrid,y:ch.leffVsL.Lgrid,color:"#d1d5db",width:1,dash:[2,2],label:"Leff=L"}],
+    vlines:[{x:ch.leffVsL.curL,color:C.green,dash:[5,3]}],
+    marks:[{x:ch.leffVsL.curL,y:ch.leffVsL.curLeff,color:C.green}], ymin:0 });
+
+  const mc=ch.modeComp;
+  drawPlot(CV.modeComp,{ title:TT.modeComp, xlabel:"Leff (mm)", ylabel:"torque capacity (N·m)",
+    series:[{x:mc.Le,y:mc.tUni,color:C.blue,width:2,label:"uni tooth"},
+            {x:mc.Le,y:mc.tBi,color:C.red,width:2,label:"bi tooth"},
+            {x:mc.Le,y:mc.sUni,color:C.blue,width:2,dash:[6,3],label:"uni shaft"},
+            {x:mc.Le,y:mc.sBi,color:C.red,width:2,dash:[6,3],label:"bi shaft"}],
+    bands:(mc.xUni&&mc.xBi)?[{x0:Math.min(mc.xUni,mc.xBi),x1:Math.max(mc.xUni,mc.xBi),color:C.gold}]:[],
+    vlines:[{x:mc.curLeff,color:C.green,label:"Leff",dash:[5,3]}], ymin:0 });
+
+  drawPlot(CV.sn,{ title:TT.sn, xlabel:"cycles Nf", ylabel:"torque (N·m)", xlog:true, xmin:1e3, xmax:1e9,
+    series:[{x:ch.sn.tUni.map(d=>d[0]),y:ch.sn.tUni.map(d=>d[1]),color:C.blue,width:2,label:"uni tooth"},
+            {x:ch.sn.tBi.map(d=>d[0]),y:ch.sn.tBi.map(d=>d[1]),color:C.red,width:2,label:"bi tooth"},
+            {x:ch.sn.sUni.map(d=>d[0]),y:ch.sn.sUni.map(d=>d[1]),color:C.blue,width:2,dash:[6,3],label:"uni shaft"},
+            {x:ch.sn.sBi.map(d=>d[0]),y:ch.sn.sBi.map(d=>d[1]),color:C.red,width:2,dash:[6,3],label:"bi shaft"}],
+    hlines:[{y:state.T,color:C.green,dash:[4,3]}] });
+
+  const gd=ch.goodman;
+  drawPlot(CV.goodman,{ title:TT.goodman, xlabel:"mean stress (MPa)", ylabel:"amplitude (MPa)", xmin:0, xmax:gd.UTS, ymin:0,
+    series:[{x:gd.toothLine.map(d=>d[0]),y:gd.toothLine.map(d=>d[1]),color:C.green,width:2,label:"tooth strength"},
+            {x:gd.shaftLine.map(d=>d[0]),y:gd.shaftLine.map(d=>d[1]),color:C.black,width:2,label:"shaft strength"}],
+    marks:[{x:gd.toothUni[0],y:gd.toothUni[1],color:C.blue},{x:gd.toothBi[0],y:gd.toothBi[1],color:C.red},
+           {x:gd.shaftUni[0],y:gd.shaftUni[1],color:"#1e40af"},{x:gd.shaftBi[0],y:gd.shaftBi[1],color:"#991b1b"}] });
+
+  const sv=ch.stressVsT;
+  drawPlot(CV.stressVsT,{ title:TT.stressVsT, xlabel:"torque (N·m)", ylabel:"peak stress (MPa)", ymin:0,
+    series:[{x:sv.tooth.map(d=>d[0]),y:sv.tooth.map(d=>d[1]),color:C.blue,width:2,label:"tooth σ"},
+            {x:sv.shaft.map(d=>d[0]),y:sv.shaft.map(d=>d[1]),color:C.black,width:2,label:"shaft τ"}],
+    hlines:[{y:sv.sig_e,color:C.green,dash:[4,3]},{y:sv.tau_e,color:C.orange,dash:[4,3]}],
+    vlines:[{x:state.T,color:C.green,dash:[4,3]}] });
+
+  const fr=ch.fretting, nrm=a=>{const mx=Math.max(...a)||1; return a.map(v=>v/mx);};
+  drawPlot(CV.fretting,{ title:TT.fretting, xlabel:"x (mm)", ylabel:"normalized", ymin:0,
+    series:[{x:fr.fx,y:nrm(fr.press),color:C.blue,width:2,label:"pressure"},
+            {x:fr.fx,y:nrm(fr.slip),color:C.green,width:2,label:"slip"},
+            {x:fr.fx,y:nrm(fr.ffdp),color:C.red,width:2.5,label:"FFDP"}],
+    vlines:[{x:fr.fret_site,color:C.red,dash:[5,3]}] });
+
+  const bu=ch.bursting;
+  drawPlot(CV.bursting,{ title:TT.bursting, xlabel:"torque (N·m)", ylabel:"hoop stress (MPa)", ymin:0,
+    series:[{x:bu.curve.map(d=>d[0]),y:bu.curve.map(d=>d[1]),color:C.gold,width:2,label:"σ hoop"}],
+    hlines:[{y:bu.sig_e,color:C.green,dash:[4,3]},{y:bu.UTS,color:C.red,dash:[4,3]}],
+    vlines:[{x:state.T,color:C.green,dash:[4,3]}] });
+}
+
+buildUI(); render();
+window.addEventListener("resize", render);
+</script>
+</body>
+</html>
