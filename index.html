@@ -14,7 +14,7 @@
   header .btns { display:flex; gap:8px; }
   header button { font:12px system-ui; padding:6px 11px; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:6px; cursor:pointer; }
   header button:hover { background:#eef2ff; }
-  .layout { display:grid; grid-template-columns:340px 1fr; gap:14px; padding:14px; align-items:start; }
+  .layout { display:grid; grid-template-columns:360px 1fr; gap:14px; padding:14px; align-items:start; }
   .panel { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
   .panel.sticky { position:sticky; top:14px; max-height:calc(100vh - 28px); overflow:auto; }
   h2.grp { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--mut);
@@ -22,15 +22,15 @@
   .ctrl { margin:9px 0; }
   .ctrl label { display:flex; justify-content:space-between; font-size:12px; gap:8px; }
   .ctrl label .nm { font-weight:600; } .ctrl label .un { color:var(--mut); white-space:nowrap; }
-  .ctrl label .sym { color:var(--blue); font-family:"Cambria Math",Georgia,serif; font-weight:600; margin-left:5px; }
-  .ro .k .sym, .chart .cap .sym { color:var(--blue); font-family:"Cambria Math",Georgia,serif; }
+  .sym { color:var(--blue); font-family:"Cambria Math",Georgia,serif; font-weight:600; margin-left:5px; }
   .ctrl .row { display:flex; gap:6px; align-items:center; }
   .ctrl input[type=range] { flex:1; }
   .ctrl input[type=number] { width:74px; font:12px monospace; padding:2px 4px; border:1px solid var(--line); border-radius:4px; }
+  .ctrl select { font:12px system-ui; padding:2px 4px; border:1px solid var(--line); border-radius:4px; background:#fff; }
   .ctrl .hint { color:var(--mut); font-size:11px; margin-top:2px; }
   .ctrl .eff { font-size:11px; font-weight:600; margin-top:2px; }
-  .ctrl .eff.up { color:#15803d; }      /* raising this slider → longer life */
-  .ctrl .eff.down { color:#b91c1c; }    /* raising this slider → shorter life */
+  .ctrl .eff.up { color:#15803d; }      /* raising this input → longer life */
+  .ctrl .eff.down { color:#b91c1c; }    /* raising this input → shorter life */
   .ctrl .eff.neutral { color:#6b7280; } /* little or mixed effect on life */
   .modal-bg { position:fixed; inset:0; background:rgba(8,12,22,0.55); display:none; align-items:center; justify-content:center; z-index:50; }
   .modal-bg.show { display:flex; }
@@ -43,11 +43,15 @@
   .modal button.cancel:hover { background:#f3f4f6; }
   .modal button.confirm { background:#dc2626; color:#fff; border-color:#dc2626; }
   .modal button.confirm:hover { background:#b91c1c; }
-  .readout { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:8px; }
+  .panel h3.rh { margin:2px 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); }
+  .readout { display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:8px; }
   .ro { background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
   .ro .k { font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--mut); }
   .ro .v { font-size:16px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--ink); }
   .ro .v.warn { color:#b45309; } .ro .v.bad { color:#b91c1c; } .ro .v.good { color:#15803d; }
+  .ro .f { font-family:"Cambria Math",Georgia,serif; font-size:11px; color:#42506a; background:#eef2f7;
+           border-radius:4px; padding:2px 5px; margin-top:4px; display:block; }
+  .ro .c { font-size:10.5px; color:#64748b; margin-top:3px; line-height:1.35; }
   .story { background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:9px 11px; margin-top:10px; font-size:12.5px; }
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(370px,1fr)); gap:14px; margin-top:14px; }
   .chart { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 10px 10px; }
@@ -67,6 +71,7 @@
   <div class="panel sticky" id="controls"></div>
   <div>
     <div class="panel">
+      <h3 class="rh" id="roHead"></h3>
       <div class="readout" id="readout"></div>
       <div class="story" id="story"></div>
     </div>
@@ -90,120 +95,153 @@
 <script>
 "use strict";
 
-/* ===================== parameter definitions (bilingual) ===================== */
-/* item tuple: [key,min,max,step,def,unit, en_label,en_hint, ja_label,ja_hint, en_effect,ja_effect] */
+/* ===================== controls ======================================
+   slider: {kind:"slider",key,min,max,step,unit,sym, en:{label,hint,eff}, ja:{...}}
+   coef:   {kind:"coef",key,unit,sym, en:{label,hint,eff}, ja:{...},
+            manualField,manualMin,manualMax,manualStep,
+            options:[{id, en, ja, set:{stateField:value}, manual?:true}]}
+   "coef" controls let the engineer pick how a coefficient is found (auto from
+   geometry/finish, or manual). The resolved value appears in the panel above
+   with its formula and caveats. ==================================== */
+const slider = (key,min,max,step,unit,sym,en,ja) => ({kind:"slider",key,min,max,step,unit,sym,en,ja});
+
 const GROUPS = [
-  { en:"Spline teeth", ja:"歯部", items:[
-    ["PCD",30,120,0.5,60,"mm",
-      "Pitch circle dia PCD","Pitch diameter of the spline; radius r = PCD/2 carries the torque. Module m = PCD/N is derived (shown above). Larger PCD → larger r and, at fixed N, a coarser module (bigger teeth).",
-      "基準円直径 PCD","スプラインの基準円直径。半径 r = PCD/2 がトルクを伝えます。モジュール m = PCD/N は従属値（上に表示）。PCD が大きいほど r が大きく、N 一定ならモジュールも大きく（歯が大きく）なります。",
-      "↑ PCD → bigger radius & teeth → lower tooth force → ↑ life","PCD↑ → 半径・歯が大 → 歯面力↓ → 寿命↑"],
-    ["N",10,60,1,24,"",
-      "Tooth count N","Teeth at the fixed PCD; module m = PCD/N. At 100% engagement all N teeth share the load, so each carries proportionally less (∝1/N), which cancels their smaller section — tooth bending stress is nearly flat in N. The only residual: more teeth stiffen the coupling (k_θ ∝ N), shortening L_eff and concentrating the load, so stress rises mildly (~√N).",
-      "歯数 N","固定 PCD の歯数。モジュール m = PCD/N。かみあい率 100% では全 N 枚が荷重を分担し、1歯あたりは比例して軽く (∝1/N) なり、歯断面が小さくなる効果と相殺 — 歯元曲げ応力は N にほぼ依存しません。唯一の残効果：歯数が多いほど結合が剛くなり (k_θ ∝ N)、L_eff が縮んで荷重が集中し、応力が緩やかに (~√N) 上がります。",
-      "↑ N → load shared by more, smaller teeth (cancels); mild ↓ life via stiffer mesh","N↑ → 多くの小さい歯で分担（相殺）；結合剛性増で緩やかに寿命↓"],
-    ["eng_pct",20,100,1,100,"%",
-      "Teeth engaged %","Fraction of the N teeth actually sharing load. Ideally 100%; pitch/index error or misalignment drops it. Engaged count n_c = % × N is shown above. Fewer engaged → higher load on each → higher stress.",
-      "かみあい率 %","N 枚のうち実際に荷重を分担する割合。理想は 100%。ピッチ・割出誤差や芯ずれで低下。かみあい歯数 n_c = % × N は上に表示。少ないほど1歯荷重↑ → 応力↑。",
-      "↑ engagement → more teeth share → lower per-tooth load → ↑ life","かみあい率↑ → 分担歯数↑ → 1歯荷重↓ → 寿命↑"],
-    ["phi",14.5,45,0.5,30,"deg",
-      "Pressure angle","Angle of the line of action. Splits flank-normal load into tangential (W_t, carries torque) and radial (W_r = W_t·tan α, pushes the sleeve open). It does NOT change tooth-bending or shaft-torsion life here, but it drives the sleeve bursting (and flank contact) — see the bursting chart.",
-      "圧力角","作用線の角度。歯面法線力を接線 (W_t, トルク伝達) と半径 (W_r = W_t·tan α, スリーブを押し広げる) に分けます。本ツールの歯曲げ・軸ねじり寿命は変えませんが、スリーブ拡張（と歯面接触）に効きます（拡張グラフ参照）。",
-      "↑ α → more radial load → higher sleeve bursting (see bursting chart)","α↑ → 半径荷重↑ → スリーブ拡張↑（拡張グラフ参照）"],
-    ["sbase_factor",0.3,0.8,0.01,0.5,"",
-      "Tooth base thk / pitch","Root thickness as a fraction of circular pitch. Bending/shear strength grows with thickness², so chunkier teeth resist tooth-off.",
-      "歯元厚 / ピッチ","周ピッチに対する歯元の厚さの比。曲げ・せん断強さは厚さの2乗で増えるため、厚い歯ほど歯欠けに強い。",
-      "↑ thickness → stronger teeth → ↑ tooth life","厚さ↑ → 歯が丈夫 → 歯の寿命↑"],
-    ["hwork_factor",0.4,1.4,0.05,0.9,"",
-      "Working height / module","Radial contact height ÷ module. Taller contact spreads bearing load but lengthens the bending lever.",
-      "有効歯丈 / モジュール","半径方向の接触高さ÷モジュール。高いほど面圧は分散しますが、曲げのレバーが長くなります。",
-      "↑ height → longer bending lever → ↓ tooth life","歯丈↑ → 曲げレバー長 → 歯の寿命↓"],
-    ["hload_factor",0.2,0.9,0.05,0.5,"",
-      "Load arm / working ht","Height of the resultant flank load above the root, as a fraction of working height. Longer lever → more root bending.",
-      "荷重腕 / 有効歯丈","歯元から見た合力作用点の高さ（有効歯丈に対する比）。レバーが長いほど歯元曲げが増えます。",
-      "↑ arm → more root bending → ↓ tooth life","腕↑ → 歯元曲げ↑ → 歯の寿命↓"],
+  { en:"Spline geometry", ja:"スプライン形状", items:[
+    slider("PCD",30,120,0.5,"mm","PCD",
+      {label:"Pitch circle dia PCD",hint:"Pitch diameter of the spline; radius r = PCD/2 carries the torque. Module m = PCD/N is derived. Larger PCD → larger r and, at fixed N, bigger teeth.",
+       eff:"↑ PCD → bigger radius & teeth → lower tooth force → ↑ life"},
+      {label:"基準円直径 PCD",hint:"スプラインの基準円直径。半径 r = PCD/2 がトルクを伝える。モジュール m = PCD/N は従属。PCD が大きいほど r が大きく、N 一定なら歯も大きい。",
+       eff:"PCD↑ → 半径・歯が大 → 歯面力↓ → 寿命↑"}),
+    slider("N",10,60,1,"","N",
+      {label:"Tooth count N",hint:"Teeth at the fixed PCD; m = PCD/N. More teeth share the load (∝1/N) but are smaller (root thickness s_F shrinks) and stiffen the mesh (k_θ ∝ N, shorter L_eff). Net life falls as N rises.",
+       eff:"↑ N → smaller teeth + stiffer mesh → ↓ life"},
+      {label:"歯数 N",hint:"固定 PCD の歯数。m = PCD/N。歯数が多いほど分担は増える(∝1/N)が、歯は小さく(歯元厚 s_F 減)、結合は剛く(k_θ∝N, L_eff 減)。差引きで寿命は下がる。",
+       eff:"N↑ → 歯が小・結合剛 → 寿命↓"}),
+    slider("eng_pct",20,100,1,"%","n_c",
+      {label:"Teeth engaged %",hint:"Fraction of the N teeth actually sharing load. Ideally 100%; pitch/index error or misalignment drops it. Engaged count n_c = % × N is shown in the panel.",
+       eff:"↑ engagement → more teeth share → lower per-tooth load → ↑ life"},
+      {label:"かみあい率 %",hint:"N 枚のうち実際に荷重を分担する割合。理想は 100%。ピッチ・割出誤差や芯ずれで低下。かみあい歯数 n_c = % × N はパネルに表示。",
+       eff:"かみあい率↑ → 分担歯数↑ → 1歯荷重↓ → 寿命↑"}),
+    slider("phi",14.5,45,0.5,"deg","&alpha;",
+      {label:"Pressure angle",hint:"Angle of the line of action. Splits the flank-normal load into tangential (W_t, torque) and radial (W_r = W_t·tan α, opens the sleeve). It thickens the involute root section (s_F grows with α), and feeds the flank contact pressure (∝1/cos α → fretting), the fillet K_f, and the sleeve bursting.",
+       eff:"↑ α → thicker, stronger root (outweighs the contact penalty) → ↑ life; but ↑ bursting"},
+      {label:"圧力角",hint:"作用線の角度。歯面法線力を接線(W_t,トルク)と半径(W_r=W_t·tanα,スリーブを押し広げる)に分ける。歯元のインボリュート断面を厚くし(s_F は α とともに増)、歯面接触圧(∝1/cosα→フレッティング)、歯元 K_f、スリーブ拡張にも効く。",
+       eff:"α↑ → 歯元が厚く強く（接触の不利を上回る）→ 寿命↑；ただし拡張↑"}),
+    slider("L",8,90,0.5,"mm","L",
+      {label:"Engagement length L",hint:"Physical overlap of the splines. Only the first ~3/β of it actually carries load (see L_eff).",
+       eff:"↑ L → ↑ L_eff up to the 1/β plateau → ↑ tooth life"},
+      {label:"かみあい長さ L",hint:"スプラインの重なり長さ。実際に荷重を担うのは端から約 3/β まで（L_eff 参照）。",
+       eff:"L↑ → 1/β の頭打ちまで L_eff↑ → 歯の寿命↑"}),
+    slider("r_fillet",0.05,3,0.05,"mm","r_f",
+      {label:"Root fillet radius",hint:"Fillet radius at the tooth/shaft root. Blunts the notch: a bigger radius lowers both the tooth fillet K_f and the shaft root K_t.",
+       eff:"↑ fillet → lower K_f & K_t → ↑ life"},
+      {label:"歯底すみ肉半径",hint:"歯元・軸歯底のすみ肉半径。切欠きを緩める：大きいほど歯元 K_f と軸歯底 K_t がともに下がる。",
+       eff:"すみ肉↑ → K_f・K_t↓ → 寿命↑"}),
+    { kind:"coef", key:"h_work", unit:"mm", sym:"h_work", manualField:"hwork_manual", manualMin:0.2, manualMax:8, manualStep:0.05,
+      en:{label:"Working depth h_work",hint:"Engaged flank height (radial). Sets the contact pressure and is the basis for the root section and load arm. Auto uses the ISO 4156 nominal (≈ module); switch to manual to enter the value off the print.",eff:"mixed: less contact pressure but a longer bending lever"},
+      ja:{label:"有効歯丈 h_work",hint:"かみあう歯面の半径方向高さ。接触圧を決め、歯元断面と荷重腕の基準になる。自動は ISO 4156 公称(≈モジュール)。図面値は手動で入力。",eff:"混在：面圧は下がるが曲げレバーは伸びる"},
+      options:[ {id:"auto",en:"auto: ≈ module",ja:"自動: ≈ モジュール",set:{hwork_mode:"auto"}},
+                {id:"manual",en:"manual (mm)",ja:"手動 (mm)",set:{hwork_mode:"manual"},manual:true} ] },
+    { kind:"coef", key:"s_base", unit:"mm", sym:"s_F", manualField:"sbase_manual", manualMin:0.5, manualMax:12, manualStep:0.05,
+      en:{label:"Root thickness s_F",hint:"Tooth thickness at the root critical section — the bending section (strength ∝ s_F²). Auto computes the involute chordal thickness at the root-form circle from m, N, α; switch to manual for the measured value.",eff:"↑ thickness → stronger teeth → ↑ tooth life"},
+      ja:{label:"歯元厚 s_F",hint:"歯元危険断面の歯厚＝曲げ断面(強さ∝s_F²)。自動は m,N,α から歯底円のインボリュート弦厚を計算。実測値は手動。",eff:"厚さ↑ → 歯が丈夫 → 歯の寿命↑"},
+      options:[ {id:"auto",en:"auto: involute @ root",ja:"自動: 歯底インボリュート",set:{sbase_mode:"auto"}},
+                {id:"manual",en:"manual (mm)",ja:"手動 (mm)",set:{sbase_mode:"manual"},manual:true} ] },
+    { kind:"coef", key:"h_load", unit:"mm", sym:"h_F", manualField:"hload_manual", manualMin:0.2, manualMax:10, manualStep:0.05,
+      en:{label:"Load arm h_F",hint:"Bending moment arm from the root section to where the resultant flank load acts. Pick the load position (pitch-line typical, tip = worst case) or enter it directly.",eff:"↑ arm → more root bending → ↓ tooth life"},
+      ja:{label:"荷重腕 h_F",hint:"歯元断面から合力作用点までの曲げモーメント腕。荷重位置(基準円が標準、歯先が最悪)を選ぶか直接入力。",eff:"腕↑ → 歯元曲げ↑ → 歯の寿命↓"},
+      options:[ {id:"pitch",en:"pitch-line (typical)",ja:"基準円（標準）",set:{hload_mode:"pitch"}},
+                {id:"hpstc",en:"HPSTC",ja:"単対かみあい上端",set:{hload_mode:"hpstc"}},
+                {id:"tip",en:"tip (worst case)",ja:"歯先（最悪）",set:{hload_mode:"tip"}},
+                {id:"manual",en:"manual (mm)",ja:"手動 (mm)",set:{hload_mode:"manual"},manual:true} ] },
   ]},
   { en:"Load spread (shear-lag)", ja:"荷重分布（シアラグ）", items:[
-    ["L",8,90,0.5,40,"mm",
-      "Engagement length L","Physical overlap of the splines. Only the first ~3/β of it actually carries load (see L_eff).",
-      "かみあい長さ L","スプラインの重なり長さ。実際に荷重を担うのは端から約 3/β までです（L_eff 参照）。",
-      "↑ L → ↑ L_eff up to the 1/β plateau → ↑ tooth life","L↑ → 1/β の頭打ちまで L_eff↑ → 歯の寿命↑"],
-    ["cp",2,40,0.5,14,"N/mm/um",
-      "Mesh stiffness c_p","How stiffly teeth resist tangential give per mm of length. THE driver of load concentration: higher c_p → shorter decay length 1/β → load bunches at the bite edge.",
-      "かみあい剛性 c_p","単位長さあたり、歯が接線方向のたわみにどれだけ抵抗するか。荷重集中の最大要因：c_p が大きいほど減衰長さ 1/β が短くなり、荷重が端に集中します。",
-      "↑ c_p → load bunches (↓ L_eff) → ↓ tooth life","c_p↑ → 荷重集中（L_eff↓）→ 歯の寿命↓"],
-    ["d_root",20,90,0.1,57,"mm",
-      "Shaft spline root dia","The shaft's torsional cross-section (and its stiffness GJ_s). Shaft shear = 16T/(πd³), so small changes move the shaft-inward capacity strongly; a stiffer shaft also spreads the load.",
-      "軸スプライン歯底径","軸のねじり断面（および剛性 GJ_s）。軸のせん断応力 = 16T/(πd³) で、わずかな変化で軸内向きの耐力が大きく動きます。軸が剛いほど荷重も分散します。",
-      "↑ dia → lower shaft stress → ↑ shaft life (failure shifts to teeth)","径↑ → 軸応力↓ → 軸の寿命↑（破壊は歯側へ）"],
-    ["sleeve_OD",40,160,0.5,95,"mm",
-      "Sleeve OD","Outer diameter of the side gear/sleeve, setting its torsional stiffness GJ. In shear-lag the COMPLIANT member drives concentration, so a stiffer sleeve actually spreads the load more evenly (lowers β).",
-      "スリーブ外径","サイドギア/スリーブの外径でねじり剛性 GJ を決めます。シアラグでは柔らかい部材が集中を生むため、スリーブが剛いほど荷重はむしろ均一に分散します（β が下がる）。",
-      "↑ OD → stiffer sleeve → lower β → ↑ L_eff (load spreads)","外径↑ → スリーブ剛性↑ → β↓ → L_eff↑（荷重分散）"],
-    ["sleeve_bore",25,100,0.5,58,"mm",
-      "Sleeve bore","Inner (internal-spline minor) diameter. A bigger bore thins the wall → softer sleeve → that compliant member raises β → load concentrates (shorter L_eff). Also thins the rim for bursting.",
-      "スリーブ内径","内歯スプラインの歯先円直径。内径が大きいほど肉厚が薄く柔らかくなり、その柔らかい部材が β を上げて荷重が集中します（L_eff↓）。拡張に対するリムも薄くなります。",
-      "↑ bore → softer/thinner sleeve → ↓ L_eff & ↑ bursting","内径↑ → スリーブ柔・薄 → L_eff↓・拡張↑"],
-    ["G",60000,90000,1000,80000,"MPa",
-      "Shear modulus G","Steel ≈ 80 GPa. Enters every torsional stiffness GJ; β ∝ 1/√G, so stiffer members spread the load.",
-      "横弾性係数 G","鋼は約 80 GPa。すべてのねじり剛性 GJ に含まれ、β ∝ 1/√G。剛い部材ほど荷重が分散します。",
-      "↑ G → stiffer members → smaller β → ↑ L_eff (load spreads)","G↑ → 部材剛性↑ → β↓ → L_eff↑（荷重分散）"],
+    { kind:"coef", key:"cp", unit:"N/mm/&micro;m", sym:"c_p", manualField:"cp_manual", manualMin:2, manualMax:40, manualStep:0.5,
+      en:{label:"Mesh stiffness c_p",hint:"Tangential tooth-pair stiffness per mm of face. THE driver of load concentration: higher c_p → shorter 1/β → load bunches at the bite edge. Auto uses the ISO 6336 single-mesh value, or enter a manual/FE-extracted value.",eff:"↑ c_p → load bunches (↓ L_eff) → ↓ tooth life"},
+      ja:{label:"かみあい剛性 c_p",hint:"単位歯幅あたりの接線剛性。荷重集中の最大要因：大きいほど 1/β が短く端に集中。自動は ISO 6336 単一かみあい値、または手動/FE 値。",eff:"c_p↑ → 集中(L_eff↓) → 歯の寿命↓"},
+      options:[ {id:"iso",en:"auto: ISO 6336 c'",ja:"自動: ISO 6336 c'",set:{cp_mode:"iso"}},
+                {id:"manual",en:"manual",ja:"手動",set:{cp_mode:"manual"},manual:true} ] },
+    slider("d_root",20,90,0.1,"mm","d",
+      {label:"Shaft spline root dia",hint:"The shaft's torsional cross-section and stiffness GJ_s. Shaft shear = K_t·16T/(πd³), so small changes move the shaft-inward capacity strongly; a stiffer shaft also spreads the load.",
+       eff:"↑ dia → lower shaft stress → ↑ shaft life (failure shifts to teeth)"},
+      {label:"軸スプライン歯底径",hint:"軸のねじり断面と剛性 GJ_s。軸せん断 = K_t·16T/(πd³)。わずかな変化で軸内向き耐力が大きく動き、剛い軸は荷重も分散。",
+       eff:"径↑ → 軸応力↓ → 軸の寿命↑（破壊は歯側へ）"}),
+    slider("sleeve_OD",40,160,0.5,"mm","R_o",
+      {label:"Sleeve OD",hint:"Outer diameter of the side gear/sleeve, setting its stiffness GJ. In shear-lag the COMPLIANT member drives concentration, so a stiffer sleeve spreads the load more evenly (lowers β).",
+       eff:"↑ OD → stiffer sleeve → lower β → ↑ L_eff (load spreads)"},
+      {label:"スリーブ外径",hint:"サイドギア/スリーブの外径で剛性 GJ を決める。シアラグでは柔らかい部材が集中を生むため、剛いほど荷重は均一に分散(β↓)。",
+       eff:"外径↑ → 剛性↑ → β↓ → L_eff↑（分散）"}),
+    slider("sleeve_bore",25,100,0.5,"mm","R_i",
+      {label:"Sleeve bore",hint:"Internal-spline minor diameter. A bigger bore thins the wall → softer sleeve → raises β → load concentrates (shorter L_eff). Also thins the rim for bursting.",
+       eff:"↑ bore → softer/thinner sleeve → ↓ L_eff & ↑ bursting"},
+      {label:"スリーブ内径",hint:"内歯スプライン歯先円径。大きいほど肉薄・柔らかく β を上げ荷重集中(L_eff↓)。拡張に対するリムも薄くなる。",
+       eff:"内径↑ → 柔・薄 → L_eff↓・拡張↑"}),
+    slider("G",60000,90000,1000,"MPa","G",
+      {label:"Shear modulus G",hint:"Steel ≈ 80 GPa. Enters every torsional stiffness GJ; β ∝ 1/√G, so stiffer members spread the load.",
+       eff:"↑ G → stiffer members → smaller β → ↑ L_eff (load spreads)"},
+      {label:"横弾性係数 G",hint:"鋼は約 80 GPa。すべてのねじり剛性 GJ に含まれ β ∝ 1/√G。剛いほど分散。",
+       eff:"G↑ → 剛性↑ → β↓ → L_eff↑（分散）"}),
   ]},
   { en:"Stress concentration", ja:"応力集中", items:[
-    ["Kt",1,5,0.05,3.0,"",
-      "Shaft root K_t (torsion)","Stress-concentration at the shaft spline-root fillet under torsion. Multiplies nominal shaft shear — the main lever on shaft-inward cracking.",
-      "軸歯底 K_t（ねじり）","ねじりによる軸スプライン歯底すみ肉の応力集中。公称せん断応力に乗り、軸内向き亀裂の主要因です。",
-      "↑ K_t → ↑ shaft stress → ↓ shaft life (favors shaft-inward)","K_t↑ → 軸応力↑ → 軸の寿命↓（軸内向き有利）"],
-    ["Kf",1,4,0.05,2.0,"",
-      "Tooth fillet K_f (bending)","Stress-concentration at the tooth-root fillet under bending. Multiplies tooth bending stress.",
-      "歯元 K_f（曲げ）","曲げによる歯元すみ肉の応力集中。歯の曲げ応力に乗ります。",
-      "↑ K_f → ↑ tooth stress → ↓ tooth life","K_f↑ → 歯応力↑ → 歯の寿命↓"],
+    { kind:"coef", key:"Kt", unit:"", sym:"K_t", manualField:"Kt_manual", manualMin:1, manualMax:6, manualStep:0.05,
+      en:{label:"Shaft root K_t (torsion)",hint:"Torsion stress-concentration at the shaft spline-root fillet — the main lever on shaft-inward cracking. Enter a Peterson/FE value (recommended), or use the Neuber estimate from the fillet radius.",eff:"↑ K_t → ↑ shaft stress → ↓ shaft life"},
+      ja:{label:"軸歯底 K_t（ねじり）",hint:"軸スプライン歯底すみ肉のねじり応力集中＝軸内向き亀裂の主要因。Peterson/FE 値の入力を推奨、またはすみ肉半径からの Neuber 推定。",eff:"K_t↑ → 軸応力↑ → 軸の寿命↓"},
+      options:[ {id:"manual",en:"manual (chart / FE)",ja:"手動（チャート/FE）",set:{Kt_mode:"manual"},manual:true},
+                {id:"auto",en:"estimate (Neuber)",ja:"推定（Neuber）",set:{Kt_mode:"auto"}} ] },
   ]},
   { en:"Material", ja:"材料", items:[
-    ["UTS",800,2200,10,1500,"MPa",
-      "Tensile strength UTS","Ultimate strength. All fatigue strengths scale from it (endurance ≈ 0.42·UTS bending, 0.29·UTS torsion).",
-      "引張強さ UTS","引張強さ。すべての疲労強さがこれに比例（耐久限 ≈ 曲げ 0.42·UTS、ねじり 0.29·UTS）。",
-      "↑ UTS → stronger material → ↑ life (all modes)","UTS↑ → 材料が強い → 寿命↑（全モード）"],
-    ["surf",0.4,1.0,0.01,0.85,"",
-      "Surface/size factor","Surface-finish and size knockdown on the endurance limit. Rougher/bigger → lower.",
-      "表面・寸法係数","表面粗さと寸法による耐久限の低下。粗い/大きいほど低い。",
-      "↑ factor → better surface/size → higher endurance → ↑ life","係数↑ → 表面・寸法が良 → 耐久限↑ → 寿命↑"],
-    ["b",-0.14,-0.04,0.005,-0.085,"",
-      "Basquin exponent b","Slope of the S-N line. More negative → life drops faster as load rises.",
-      "Basquin 指数 b","S-N 線の勾配。負に大きいほど、荷重増加で寿命が急速に下がります。",
-      "more negative → steeper S-N → life more load-sensitive","負に大 → S-N が急 → 寿命が荷重に敏感"],
+    slider("UTS",800,2200,10,"MPa","&sigma;_u",
+      {label:"Tensile strength UTS",hint:"Ultimate strength. All fatigue strengths scale from it (endurance ≈ 0.42·UTS bending, 0.29·UTS torsion).",
+       eff:"↑ UTS → stronger material → ↑ life (all modes)"},
+      {label:"引張強さ UTS",hint:"引張強さ。すべての疲労強さがこれに比例（耐久限 ≈ 曲げ 0.42·UTS、ねじり 0.29·UTS）。",
+       eff:"UTS↑ → 材料が強い → 寿命↑（全モード）"}),
+    { kind:"coef", key:"surf", unit:"", sym:"C_surf", manualField:"surf_manual", manualMin:0.3, manualMax:1, manualStep:0.01,
+      en:{label:"Surface / size factor",hint:"Marin endurance knockdown k_a·k_b. Pick the surface finish (drives k_a with UTS); size k_b comes from d. As-forged surfaces are far harsher than machined/ground.",eff:"↑ factor → higher endurance → ↑ life"},
+      ja:{label:"表面・寸法係数",hint:"Marin 耐久低減 k_a·k_b。仕上げを選ぶと k_a(UTS依存)が決まり、寸法 k_b は d から。鍛造肌は機械/研削より大幅に厳しい。",eff:"係数↑ → 耐久限↑ → 寿命↑"},
+      options:[ {id:"ground",en:"ground",ja:"研削",set:{finish:"ground",surf_mode:"auto"}},
+                {id:"machined",en:"machined",ja:"機械加工",set:{finish:"machined",surf_mode:"auto"}},
+                {id:"hotrolled",en:"hot-rolled",ja:"熱間圧延",set:{finish:"hotrolled",surf_mode:"auto"}},
+                {id:"forged",en:"as-forged",ja:"鍛造肌",set:{finish:"forged",surf_mode:"auto"}},
+                {id:"manual",en:"manual",ja:"手動",set:{surf_mode:"manual"},manual:true} ] },
+    { kind:"coef", key:"b", unit:"", sym:"b", manualField:"b_manual", manualMin:-0.14, manualMax:-0.04, manualStep:0.005,
+      en:{label:"Basquin exponent b",hint:"Slope of the S-N line. Auto estimates it from UTS (Shigley f-factor); enter the measured slope if you have S-N data. More negative → life drops faster with load.",eff:"more negative → life more load-sensitive"},
+      ja:{label:"Basquin 指数 b",hint:"S-N 線の勾配。自動は UTS から推定(Shigley f係数)。S-N データがあれば実測勾配を入力。負に大きいほど荷重に敏感。",eff:"負に大 → 寿命が荷重に敏感"},
+      options:[ {id:"auto",en:"auto: estimate",ja:"自動: 推定",set:{b_mode:"auto"}},
+                {id:"manual",en:"manual",ja:"手動",set:{b_mode:"manual"},manual:true} ] },
   ]},
   { en:"Direction knockdowns", ja:"方向別の低減係数", items:[
-    ["fret_uni",0.2,1.0,0.05,0.40,"",
-      "Fretting factor (uni)","Unidirectional re-works the same flank spot every cycle, with a tensile mean — worst for fretting crack initiation.",
-      "フレッティング係数（片方向）","片方向は毎サイクル同じ歯面の一点を繰り返し、引張の平均応力も加わるため、クラック発生に最も厳しい。",
-      "↑ value → less fretting damage → ↑ life","値↑ → フレッティング損傷↓ → 寿命↑"],
-    ["fret_bi",0.2,1.0,0.05,0.55,"",
-      "Fretting factor (bi)","Bidirectional splits the damage over two flanks (half the cycles each).",
-      "フレッティング係数（両方向）","両方向は損傷が両歯面に分散します（各サイクル数は半分）。",
-      "↑ value → less fretting damage → ↑ life","値↑ → フレッティング損傷↓ → 寿命↑"],
-    ["mxax_uni",0.6,1.0,0.05,1.00,"",
-      "Shaft multiaxial (uni)","One tensile plane in play.",
-      "軸の多軸係数（片方向）","引張面は1つだけ。",
-      "↑ value → stronger shaft → ↑ shaft life","値↑ → 軸が強い → 軸の寿命↑"],
-    ["mxax_bi",0.6,1.0,0.05,0.85,"",
-      "Shaft multiaxial (bi)","Reversed torsion activates two crossing 45° tensile planes, so the shaft's effective strength is lower.",
-      "軸の多軸係数（両方向）","交番ねじりは交差する2つの45°引張面を励起するため、軸の実効強さが低下します。",
-      "↑ value → stronger shaft → ↑ shaft life","値↑ → 軸が強い → 軸の寿命↑"],
+    slider("fret_anchor",2,40,0.5,"MPa&middot;&micro;m","&Phi;_50",
+      {label:"Fretting anchor Φ_50",hint:"Calibration: the FFDP severity at which unidirectional fretting halves the flank fatigue strength. Lower Φ_50 → more fretting-sensitive. Anchor it to a fretting-fatigue test; the uni/bi factors are then computed from the live FFDP.",
+       eff:"↑ Φ_50 → less fretting knockdown → ↑ life"},
+      {label:"フレッティング基準 Φ_50",hint:"較正値：片方向フレッティングが歯面疲労強さを半減させる FFDP 値。小さいほど敏感。フレッティング試験で較正すると、片/両方向係数は FFDP から計算される。",
+       eff:"Φ_50↑ → フレッティング低減↓ → 寿命↑"}),
+    slider("mxax_uni",0.6,1.0,0.05,"","k_ax,u",
+      {label:"Shaft multiaxial (uni)",hint:"Critical-plane knockdown for unidirectional torsion (one tensile plane). Empirical; calibrate to test.",
+       eff:"↑ value → stronger shaft → ↑ shaft life"},
+      {label:"軸の多軸係数（片）",hint:"片方向ねじりの臨界面低減（引張面1つ）。経験値、試験で較正。",
+       eff:"値↑ → 軸が強い → 軸の寿命↑"}),
+    slider("mxax_bi",0.6,1.0,0.05,"","k_ax,b",
+      {label:"Shaft multiaxial (bi)",hint:"Reversed torsion activates two crossing 45° tensile planes, so the shaft's effective strength is lower. Empirical; calibrate to test.",
+       eff:"↑ value → stronger shaft → ↑ shaft life"},
+      {label:"軸の多軸係数（両）",hint:"交番ねじりは交差する2つの45°引張面を励起し実効強さが低下。経験値、試験で較正。",
+       eff:"値↑ → 軸が強い → 軸の寿命↑"}),
   ]},
-  { en:"Loading / fretting", ja:"荷重・フレッティング", items:[
-    ["T",200,8000,50,2500,"N*m",
-      "Peak torque T","Operating/test torque. The green markers on the stress/life/Goodman charts track it.",
-      "ピークトルク T","運転/試験トルク。応力・寿命・Goodman 図の緑マーカーが追従します。",
-      "↑ torque → ↑ stress → ↓ life (all modes)","トルク↑ → 応力↑ → 寿命↓（全モード）"],
-    ["slip0",0.05,3,0.05,0.6,"um",
-      "Peak micro-slip","Flank sliding amplitude (fretting); grows toward the low-load end.",
-      "最大微小すべり","歯面のすべり振幅（フレッティング）。低荷重端に向かって増加します。",
-      "↑ slip → more fretting energy (affects the fretting chart here)","すべり↑ → フレッティング大（本ツールではフレッティング図のみ）"],
-    ["mu",0.1,0.9,0.05,0.30,"",
-      "Friction coefficient","Flank friction; fretting shear ≈ μ·pressure.",
-      "摩擦係数","歯面の摩擦。フレッティングせん断 ≈ μ·面圧。",
-      "↑ friction → more fretting shear (affects the fretting chart here)","摩擦↑ → フレッティングせん断↑（本ツールではフレッティング図のみ）"],
+  { en:"Loading", ja:"荷重", items:[
+    slider("T",200,8000,50,"N*m","T",
+      {label:"Peak torque T",hint:"Operating/test torque. The green markers on the stress/life/Goodman/bursting charts track it; it also sets the FFDP severity.",
+       eff:"↑ torque → ↑ stress & FFDP → ↓ life (all modes)"},
+      {label:"ピークトルク T",hint:"運転/試験トルク。応力・寿命・Goodman・拡張図の緑マーカーが追従。FFDP 強度も決める。",
+       eff:"トルク↑ → 応力・FFDP↑ → 寿命↓（全モード）"}),
+    slider("slip0",0.05,3,0.05,"um","&delta;",
+      {label:"Peak micro-slip",hint:"Flank sliding amplitude (fretting). Feeds the FFDP, so more slip lowers the fretting factor and life.",
+       eff:"↑ slip → ↑ FFDP → lower fretting factor → ↓ life"},
+      {label:"最大微小すべり",hint:"歯面すべり振幅（フレッティング）。FFDP に効き、すべりが大きいとフレッティング係数と寿命が下がる。",
+       eff:"すべり↑ → FFDP↑ → フレッティング係数↓ → 寿命↓"}),
+    slider("mu",0.1,0.9,0.05,"","&mu;",
+      {label:"Friction coefficient",hint:"Flank friction; fretting shear ≈ μ·pressure. Feeds the FFDP → lower fretting factor and life.",
+       eff:"↑ friction → ↑ FFDP → lower fretting factor → ↓ life"},
+      {label:"摩擦係数",hint:"歯面摩擦。フレッティングせん断 ≈ μ·面圧。FFDP に効き寿命が下がる。",
+       eff:"摩擦↑ → FFDP↑ → フレッティング係数↓ → 寿命↓"}),
   ]},
 ];
 
@@ -234,41 +272,136 @@ const CHARTS = [
     ja:["スリーブ拡張 vs トルク（圧力角）","圧力角が効く場所：半径分力 W_r = W_t&middot;tan&alpha; がリムを内圧し、内径のラメ・フープ応力が &alpha; とともに（また内径が大きく肉薄なほど）増加。耐久限線（緑）を超えるとフープ割れの懸念。緑=現在トルク。"] },
 ];
 
-const RO = [
-  { en:"module m = PCD/N", ja:"モジュール m = PCD/N", v:R=>R.module.toFixed(3)+" mm" },
-  { en:"engaged teeth n_c", ja:"かみあい歯数 n_c", v:R=>R.n_c.toFixed(0) },
-  { en:"β (decay rate)", ja:"β（減衰率）", v:R=>R.beta.toFixed(4)+" /mm" },
-  { en:"1/β (decay len)", ja:"1/β（減衰長さ）", v:R=>R.oneOverBeta.toFixed(1)+" mm" },
-  { en:"L_eff", ja:"有効長さ L_eff", v:R=>R.Leff.toFixed(1)+" mm", cls:()=>"good" },
-  { en:"stiffness ratio GJ_g/GJ_s", ja:"剛性比 GJ_g/GJ_s", v:R=>R.stiffRatio.toFixed(1)+"x" },
-  { en:"crossover L* (uni)", ja:"遷移長さ L*（片）", v:R=>(R.xUni?R.xUni.toFixed(0):"–")+" mm" },
-  { en:"crossover L* (bi)", ja:"遷移長さ L*（両）", v:R=>(R.xBi?R.xBi.toFixed(0):"–")+" mm" },
-  { en:"governs (uni)", ja:"支配モード（片）", v:(R,L)=>GOVT[L][R.govUni], cls:R=>R.govUni==="shaft"?"bad":"warn" },
-  { en:"governs (bi)", ja:"支配モード（両）", v:(R,L)=>GOVT[L][R.govBi], cls:R=>R.govBi==="shaft"?"bad":"warn" },
-  { en:"life @T (uni)", ja:"寿命 @T（片）", v:R=>eng(R.lifeUni)+" cyc", cls:R=>R.lifeUni<1e5?"bad":"good" },
-  { en:"life @T (bi)", ja:"寿命 @T（両）", v:R=>eng(R.lifeBi)+" cyc", cls:R=>R.lifeBi<1e5?"bad":"good" },
-  { en:"sleeve hoop @T", ja:"スリーブフープ応力 @T", v:R=>R.hoopAtT.toFixed(0)+" MPa", cls:R=>R.hoopAtT>R.sig_e?"bad":R.hoopAtT>0.5*R.sig_e?"warn":"good" },
-];
-
 const GOVT = { en:{teeth:"TEETH (tangential)", shaft:"SHAFT (radial-inward)"},
                ja:{teeth:"歯（接線方向）", shaft:"軸（半径方向内向き）"} };
 
-/* sign of effect on LIFE when the slider is INCREASED: +1 longer (green),
+/* ===================== calculated-parameters panel ===================== */
+/* each tile: value + formula (.f) + caveat (.c). f/c may be functions of state. */
+const fnum = (x,d=2)=> (x==null||!isFinite(x)) ? "–" : Number(x).toFixed(d);
+const DERIVED = [
+  { sym:"m", v:R=>fnum(R.module,3)+" mm",
+    en:{k:"module",f:"m = PCD / N",c:"Derived; the spline is sized by its pitch diameter."},
+    ja:{k:"モジュール",f:"m = PCD / N",c:"従属値。スプラインは基準円径で寸法が決まる。"} },
+  { sym:"n_c", v:R=>fnum(R.n_c,0),
+    en:{k:"engaged teeth",f:"n_c = (engaged% / 100) × N",c:"Assumes the engaged teeth share load equally."},
+    ja:{k:"かみあい歯数",f:"n_c = (かみあい% / 100) × N",c:"かみあう歯が均等に分担すると仮定。"} },
+  { sym:"s_F", v:R=>fnum(R.s_base,2)+" mm",
+    en:{k:"root thickness",
+        f:s=>s.sbase_mode==="manual"?"entered manually":"2·r_root·(s_p/2r + invα − inv α_root),  r_root = r − h_work",
+        c:s=>s.sbase_mode==="manual"?"Measured/CAD value.":"Section taken at the root-form circle; the true 30°-tangent section sits slightly higher (thinner), so this runs mildly non-conservative — use the measured root thickness to be exact."},
+    ja:{k:"歯元厚",
+        f:s=>s.sbase_mode==="manual"?"手動入力":"2·r_root·(s_p/2r + invα − inv α_root),  r_root = r − h_work",
+        c:s=>s.sbase_mode==="manual"?"実測/CAD 値。":"歯底円での断面。真の30°接点はやや上(薄い)ため軽度に非保守的 — 正確には実測歯厚を使用。"} },
+  { sym:"h_work", v:R=>fnum(R.h_work,2)+" mm",
+    en:{k:"working depth",
+        f:s=>s.hwork_mode==="manual"?"entered manually":"≈ module (ISO 4156 nominal working depth)",
+        c:"Fit class and fillet-root form can trim it ~10%; enter the print value for accuracy."},
+    ja:{k:"有効歯丈",
+        f:s=>s.hwork_mode==="manual"?"手動入力":"≈ モジュール（ISO 4156 公称有効歯丈）",
+        c:"はめあい等級やすみ肉歯底で約10%減ることも。正確には図面値を入力。"} },
+  { sym:"h_F", v:R=>fnum(R.h_load,2)+" mm",
+    en:{k:"load arm",
+        f:s=>({pitch:"(PCD/2) − r_root   [load at pitch line]",hpstc:"((PCD+m)/2) − r_root   [HPSTC]",tip:"((PCD+2·add)/2) − r_root   [tip]",manual:"entered manually"}[s.hload_mode]),
+        c:"Bending moment arm to the load line; tip is worst-case, pitch-line typical for distributed spline contact."},
+    ja:{k:"荷重腕",
+        f:s=>({pitch:"(PCD/2) − r_root   [基準円荷重]",hpstc:"((PCD+m)/2) − r_root   [HPSTC]",tip:"((PCD+2·add)/2) − r_root   [歯先]",manual:"手動入力"}[s.hload_mode]),
+        c:"荷重線までの曲げ腕。歯先が最悪、基準円が分布接触の標準。"} },
+  { sym:"K_f", v:R=>fnum(R.Kf,2),
+    en:{k:"tooth fillet K_f",f:"Dolan–Broghamer  H + (s_F/r_f)^L (s_F/h_F)^M",
+        c:"H,L,M anchored to 20–25° gear data and extrapolated to the spline pressure angle — approximate; confirm with FE if it governs."},
+    ja:{k:"歯元 K_f",f:"Dolan–Broghamer  H + (s_F/r_f)^L (s_F/h_F)^M",
+        c:"H,L,M は20–25°歯車データに基づきスプライン圧力角へ外挿 — 近似。支配的なら FE で確認。"} },
+  { sym:"K_t", v:R=>fnum(R.Kt,2),
+    en:{k:"shaft root K_t",
+        f:s=>s.Kt_mode==="auto"?"1 + 2√(h_work/r_f)·0.62   [Neuber]":"entered manually",
+        c:s=>s.Kt_mode==="auto"?"Upper-bound elliptical-notch estimate; a Peterson chart or FE value for the actual spline root is preferred.":"From a Peterson chart or FE."},
+    ja:{k:"軸歯底 K_t",
+        f:s=>s.Kt_mode==="auto"?"1 + 2√(h_work/r_f)·0.62   [Neuber]":"手動入力",
+        c:s=>s.Kt_mode==="auto"?"楕円切欠きの上限推定。実際の歯底は Peterson チャート/FE が望ましい。":"Peterson チャート/FE より。"} },
+  { sym:"c_p", v:R=>fnum(R.cp_eff,1)+" N/mm/µm",
+    en:{k:"mesh stiffness",
+        f:s=>s.cp_mode==="iso"?"ISO 6336  c' = 0.8/q',  q' = 0.04723 + 0.41342/N":"entered manually",
+        c:"Per mm of face. Partial contact, backlash, or a soft case lowers it; the cleanest source is FE (tangential load ÷ relative flank deflection per µm)."},
+    ja:{k:"かみあい剛性",
+        f:s=>s.cp_mode==="iso"?"ISO 6336  c' = 0.8/q',  q' = 0.04723 + 0.41342/N":"手動入力",
+        c:"単位歯幅あたり。部分接触・バックラッシ・軟質層で低下。最も確実なのは FE（接線荷重 ÷ 歯面相対変位/µm）。"} },
+  { sym:"C_surf", v:R=>fnum(R.surf,2),
+    en:{k:"surface / size",
+        f:s=>s.surf_mode==="manual"?"entered manually":"k_a·k_b  (k_a from finish & UTS, k_b from size d)",
+        c:"Multiplies the endurance limit (σ_e = 0.42·UTS·surf). As-forged surfaces are far lower than machined/ground."},
+    ja:{k:"表面・寸法",
+        f:s=>s.surf_mode==="manual"?"手動入力":"k_a·k_b（k_a は仕上げと UTS、k_b は寸法 d）",
+        c:"耐久限に乗じる（σ_e = 0.42·UTS·surf）。鍛造肌は機械/研削より大幅に低い。"} },
+  { sym:"b", v:R=>fnum(R.b,3),
+    en:{k:"Basquin slope",
+        f:s=>s.b_mode==="manual"?"entered manually":"−⅓·log10(2f),  f = Shigley fraction(UTS)",
+        c:"Estimate only; prefer the measured S-N slope when available."},
+    ja:{k:"Basquin 勾配",
+        f:s=>s.b_mode==="manual"?"手動入力":"−⅓·log10(2f)，f = Shigley 係数(UTS)",
+        c:"推定のみ。可能なら実測 S-N 勾配を使用。"} },
+  { sym:"&beta;", v:R=>fnum(R.beta,4)+" /mm",
+    en:{k:"decay rate β",f:"β = √(k_θ (1/GJ_s + 1/GJ_g)),  k_θ = n_c·c_p·r²",c:""},
+    ja:{k:"減衰率 β",f:"β = √(k_θ (1/GJ_s + 1/GJ_g)),  k_θ = n_c·c_p·r²",c:""} },
+  { sym:"1/&beta;", v:R=>fnum(R.oneOverBeta,1)+" mm",
+    en:{k:"decay length",f:"1 / β",c:"Only ~3/β of the engagement actually carries load."},
+    ja:{k:"減衰長さ",f:"1 / β",c:"荷重を担うのは約 3/β 分だけ。"} },
+  { sym:"L_eff", v:R=>fnum(R.Leff,1)+" mm", cls:()=>"good",
+    en:{k:"effective length",f:"L_eff = tanh(βL) / β",c:"The load-carrying length that the tooth/shaft capacities scale with."},
+    ja:{k:"有効長さ",f:"L_eff = tanh(βL) / β",c:"歯/軸の耐力がスケールする有効荷重長さ。"} },
+  { sym:"GJ_g/GJ_s", v:R=>fnum(R.stiffRatio,1)+"x",
+    en:{k:"stiffness ratio",f:"GJ_g / GJ_s",c:"The more compliant member sets how sharply load concentrates."},
+    ja:{k:"剛性比",f:"GJ_g / GJ_s",c:"柔らかい部材が集中の鋭さを決める。"} },
+  { sym:"L*", v:R=>fnum(R.xUni,0)+" mm",
+    en:{k:"crossover (uni)",f:"L* where tooth cap = shaft cap (uni)",c:""},
+    ja:{k:"遷移長さ（片）",f:"歯耐力 = 軸耐力 となる L*（片）",c:""} },
+  { sym:"L*", v:R=>fnum(R.xBi,0)+" mm",
+    en:{k:"crossover (bi)",f:"L* where tooth cap = shaft cap (bi)",c:"Between L*(bi) and L*(uni) the two directions fail in different modes."},
+    ja:{k:"遷移長さ（両）",f:"歯耐力 = 軸耐力 となる L*（両）",c:"L*(両)〜L*(片) の間は2方向で破壊モードが異なる。"} },
+  { sym:"p_0", v:R=>fnum(R.press_peak,0)+" MPa",
+    en:{k:"flank pressure",f:"p₀ = (q₀/r) / (n_c·cosα·h_work)",c:"Peak flank contact pressure at the bite edge."},
+    ja:{k:"歯面接触圧",f:"p₀ = (q₀/r) / (n_c·cosα·h_work)",c:"バイト端での歯面最大接触圧。"} },
+  { sym:"&Phi;", v:R=>fnum(R.ffdp,1)+" MPa·µm",
+    en:{k:"FFDP severity",f:"Φ = μ·p₀·δ   (Ruiz)",c:"Fretting severity; drives the fretting knockdowns below."},
+    ja:{k:"FFDP 強度",f:"Φ = μ·p₀·δ   (Ruiz)",c:"フレッティング強度。下の低減係数を駆動。"} },
+  { sym:"k_fr,u", v:R=>fnum(R.fret_uni,2), cls:R=>R.fret_uni<0.45?"warn":"",
+    en:{k:"fretting factor (uni)",f:"1 / (1 + Φ/Φ_50)",c:"One flank reworked every cycle. Φ_50 is the fretting anchor (left)."},
+    ja:{k:"フレッティング係数（片）",f:"1 / (1 + Φ/Φ_50)",c:"毎サイクル同一歯面。Φ_50 は左の基準値。"} },
+  { sym:"k_fr,b", v:R=>fnum(R.fret_bi,2), cls:R=>R.fret_bi<0.45?"warn":"",
+    en:{k:"fretting factor (bi)",f:"1 / (1 + 0.5·Φ/Φ_50)",c:"Half weight — fretting damage splits over two flanks."},
+    ja:{k:"フレッティング係数（両）",f:"1 / (1 + 0.5·Φ/Φ_50)",c:"半分の重み — 損傷が両歯面に分散。"} },
+  { sym:"", v:(R,L)=>GOVT[L][R.govUni], cls:R=>R.govUni==="shaft"?"bad":"warn",
+    en:{k:"governs (uni)",f:"lowest-capacity mode at the current L_eff",c:""},
+    ja:{k:"支配モード（片）",f:"現在の L_eff で最小耐力のモード",c:""} },
+  { sym:"", v:(R,L)=>GOVT[L][R.govBi], cls:R=>R.govBi==="shaft"?"bad":"warn",
+    en:{k:"governs (bi)",f:"lowest-capacity mode at the current L_eff",c:""},
+    ja:{k:"支配モード（両）",f:"現在の L_eff で最小耐力のモード",c:""} },
+  { sym:"N_f", v:R=>eng(R.lifeUni)+" cyc", cls:R=>R.lifeUni<1e5?"bad":"good",
+    en:{k:"life @T (uni)",f:"N_f = ½(σ_ar/σ'_f)^(1/b)",c:"Relative trend is robust; absolute cycles await a test anchor."},
+    ja:{k:"寿命 @T（片）",f:"N_f = ½(σ_ar/σ'_f)^(1/b)",c:"相対傾向は確か。絶対値は試験較正待ち。"} },
+  { sym:"N_f", v:R=>eng(R.lifeBi)+" cyc", cls:R=>R.lifeBi<1e5?"bad":"good",
+    en:{k:"life @T (bi)",f:"N_f = ½(σ_ar/σ'_f)^(1/b)",c:"Relative trend is robust; absolute cycles await a test anchor."},
+    ja:{k:"寿命 @T（両）",f:"N_f = ½(σ_ar/σ'_f)^(1/b)",c:"相対傾向は確か。絶対値は試験較正待ち。"} },
+  { sym:"&sigma;_hoop", v:R=>fnum(R.hoopAtT,0)+" MPa", cls:R=>R.hoopAtT>R.sig_e?"bad":R.hoopAtT>0.5*R.sig_e?"warn":"good",
+    en:{k:"sleeve hoop @T",f:"σ_hoop = p(R²+r²)/(R²−r²),  p ∝ W_t·tanα",c:"Sleeve bursting — where pressure angle enters."},
+    ja:{k:"スリーブフープ @T",f:"σ_hoop = p(R²+r²)/(R²−r²),  p ∝ W_t·tanα",c:"スリーブ拡張 — 圧力角が効く場所。"} },
+];
+
+/* sign of effect on LIFE when an input is INCREASED: +1 longer (green),
    -1 shorter (red), 0 little/mixed (neutral). Verified numerically. */
 const LIFE_SIGN = {
-  PCD:+1, N:-1, eng_pct:+1, phi:0, d_root:+1, sleeve_OD:+1, sleeve_bore:-1, L:+1,
-  sbase_factor:+1, hwork_factor:-1, hload_factor:-1,
-  cp:-1, G:+1,
-  Kt:-1, Kf:-1,
-  UTS:+1, surf:+1, b:0,
-  fret_uni:+1, fret_bi:+1, mxax_uni:+1, mxax_bi:+1,
-  T:-1, slip0:0, mu:0,
+  PCD:+1, N:-1, eng_pct:+1, phi:+1, L:+1, r_fillet:+1,
+  h_work:0, s_base:+1, h_load:-1,
+  cp:-1, d_root:+1, sleeve_OD:+1, sleeve_bore:-1, G:+1,
+  Kt:-1, UTS:+1, surf:+1, b:0,
+  fret_anchor:+1, mxax_uni:+1, mxax_bi:+1,
+  T:-1, slip0:-1, mu:-1,
 };
 const EFFCLS = s => s>0 ? "up" : s<0 ? "down" : "neutral";
 
 const STR = {
   en:{ title:"Spline torsional-fatigue explorer",
-       sub:"Drag any slider — every chart and number recomputes live. Settings are saved in this browser.",
+       sub:"Enter real spline specs on the left; coefficients are auto-computed (with their formulas) in the panel. Settings are saved in this browser.",
+       roHead:"Calculated parameters (formula + caveats under each)",
        reset:"Reset defaults", lang:"日本語",
        modalTitle:"Reset to defaults?",
        modalMsg:"This clears your saved settings and restores the generic defaults. Your language choice is kept.",
@@ -279,7 +412,8 @@ const STR = {
                   "Both directions crack the shaft inward (load well spread).") +
          ` Bidirectional life is about <b>${(R.lifeUni/Math.max(R.lifeBi,1)).toFixed(0)}x shorter</b> than unidirectional here.` },
   ja:{ title:"スプラインねじり疲労エクスプローラ",
-       sub:"スライダーを動かすと、すべてのグラフと数値がリアルタイムに再計算。設定はこのブラウザに保存されます。",
+       sub:"左に実際のスプライン諸元を入力。係数はパネルで自動計算（式付き）。設定はこのブラウザに保存。",
+       roHead:"計算パラメータ（各項目の下に式と注意）",
        reset:"既定値にリセット", lang:"English",
        modalTitle:"既定値にリセットしますか？",
        modalMsg:"保存した設定を消去し、一般的な既定値に戻します。言語設定は保持されます。",
@@ -292,36 +426,43 @@ const STR = {
 };
 
 /* ===================== state + persistence ===================== */
-const LS_STATE="spline_explorer_state_v2", LS_LANG="spline_explorer_lang_v1";
-const DEFAULTS={}; GROUPS.forEach(g=>g.items.forEach(it=>DEFAULTS[it[0]]=it[4]));
+const LS_STATE="spline_explorer_state_v3", LS_LANG="spline_explorer_lang_v1";
+const DEFAULTS = {
+  PCD:60, N:24, eng_pct:100, phi:30, L:40, r_fillet:0.45,
+  hwork_mode:"auto", hwork_manual:2.25,
+  sbase_mode:"auto", sbase_manual:4.0,
+  hload_mode:"pitch", hload_manual:2.0,
+  cp_mode:"iso", cp_manual:14,
+  d_root:57, sleeve_OD:95, sleeve_bore:58, G:80000,
+  Kt_mode:"manual", Kt_manual:3.0,
+  UTS:1500, finish:"machined", surf_mode:"auto", surf_manual:0.85,
+  b_mode:"auto", b_manual:-0.085,
+  fret_anchor:12, mxax_uni:1.0, mxax_bi:0.85,
+  T:1500, slip0:0.6, mu:0.30,
+};
 let state=Object.assign({},DEFAULTS), lang="en";
 try { const s=JSON.parse(localStorage.getItem(LS_STATE)); if(s&&typeof s==="object") Object.assign(state,s); } catch(e){}
-const sl=localStorage.getItem(LS_LANG); if(sl==="en"||sl==="ja") lang=sl;
+const slng=localStorage.getItem(LS_LANG); if(slng==="en"||slng==="ja") lang=slng;
 function save(){ try{ localStorage.setItem(LS_STATE,JSON.stringify(state)); localStorage.setItem(LS_LANG,lang);}catch(e){} }
 
 /* ===================== helpers ===================== */
 const C={blue:"#2563eb",red:"#dc2626",green:"#16a34a",gold:"#d97706",black:"#111827",gray:"#9ca3af",orange:"#ea580c"};
 function eng(v){ if(!isFinite(v))return"–"; if(v<1)return"<1"; if(v>=1e6)return(v/1e6).toFixed(v>=1e7?0:1)+"M"; if(v>=1e3)return(v/1e3).toFixed(v>=1e4?0:1)+"k"; return v.toFixed(0); }
 /* turn x_word into x<sub>word</sub> for DOM text (canvas labels use plain forms) */
-function sub(s){ return s==null?s:String(s).replace(/_([A-Za-z0-9αβγθ]+)/g,"<sub>$1</sub>"); }
+function sub(s){ return s==null?s:String(s).replace(/_([A-Za-z0-9αβγθ,]*[A-Za-z0-9αβγθ])/g,"<sub>$1</sub>"); }
+function txt(x){ return typeof x==="function" ? x(state) : x; }
+function coefCurrent(it){
+  for(const o of it.options){ let ok=true; for(const k in o.set){ if(state[k]!==o.set[k]){ok=false;break;} } if(ok) return o.id; }
+  return it.options[0].id;
+}
 
-/* symbol shown on the left next to each input, matching the chart/equation glyphs */
-const SYMS = {
-  PCD:"PCD", N:"N", eng_pct:"n<sub>c</sub>", phi:"&alpha;",
-  sbase_factor:"s<sub>base</sub>/p", hwork_factor:"h<sub>work</sub>/m", hload_factor:"h<sub>load</sub>/h<sub>work</sub>",
-  L:"L", cp:"c<sub>p</sub>", d_root:"d", sleeve_OD:"R<sub>o</sub>", sleeve_bore:"R<sub>i</sub>", G:"G",
-  Kt:"K<sub>t</sub>", Kf:"K<sub>f</sub>",
-  UTS:"&sigma;<sub>u</sub>", surf:"C<sub>surf</sub>", b:"b",
-  fret_uni:"k<sub>fr</sub>", fret_bi:"k<sub>fr</sub>", mxax_uni:"k<sub>ax</sub>", mxax_bi:"k<sub>ax</sub>",
-  T:"T", slip0:"&delta;", mu:"&mu;",
-};
-
-/* ===================== build UI (rebuilt on language switch) ===================== */
+/* ===================== build UI (rebuilt on language switch / coef change) ===================== */
 const CV={};
 function buildUI(){
   document.documentElement.lang = lang;
   document.getElementById("appTitle").textContent = STR[lang].title;
   document.getElementById("appSub").textContent = STR[lang].sub;
+  document.getElementById("roHead").textContent = STR[lang].roHead;
   document.getElementById("reset").textContent = STR[lang].reset;
   document.getElementById("lang").textContent = STR[lang].lang;
   document.getElementById("modalTitle").textContent = STR[lang].modalTitle;
@@ -333,26 +474,42 @@ function buildUI(){
   GROUPS.forEach(g=>{
     const h=document.createElement("h2"); h.className="grp"; h.textContent=g[lang]; ctn.appendChild(h);
     g.items.forEach(it=>{
-      const [key,min,max,step,def,unit,enL,enH,jaL,jaH,enE,jaE]=it;
-      const label=lang==="en"?enL:jaL, hint=lang==="en"?enH:jaH, eff=lang==="en"?enE:jaE;
+      const L=it[lang], symHtml = it.sym?`<span class="sym">${it.sym}</span>`:"";
+      const effHtml = L.eff?`<div class="eff ${EFFCLS(LIFE_SIGN[it.key]||0)}">${sub(L.eff)}</div>`:"";
       const d=document.createElement("div"); d.className="ctrl";
-      const symHtml = SYMS[key] ? `<span class="sym">${SYMS[key]}</span>` : "";
-      d.innerHTML=`<label><span class="nm">${label}${symHtml}</span><span class="un">${unit||""}</span></label>
-        <div class="row">
-          <input type="range" min="${min}" max="${max}" step="${step}" data-k="${key}">
-          <input type="number" min="${min}" max="${max}" step="${step}" data-k="${key}">
-        </div><div class="hint">${sub(hint||"")}</div><div class="eff ${EFFCLS(LIFE_SIGN[key]||0)}">${sub(eff||"")}</div>`;
-      ctn.appendChild(d);
-      const rng=d.querySelector("input[type=range]"), num=d.querySelector("input[type=number]");
-      rng.value=state[key]; num.value=state[key];
-      const on=e=>{ const v=parseFloat(e.target.value); if(!isFinite(v))return; state[key]=v; rng.value=v; num.value=v; save(); render(); };
-      rng.addEventListener("input",on); num.addEventListener("input",on);
+
+      if(it.kind==="coef"){
+        const cur=coefCurrent(it), curOpt=it.options.find(o=>o.id===cur)||it.options[0];
+        const showManual=!!curOpt.manual;
+        const opts=it.options.map(o=>`<option value="${o.id}" ${o.id===cur?"selected":""}>${o[lang]}</option>`).join("");
+        d.innerHTML=`<label><span class="nm">${L.label}${symHtml}</span><span class="un">${it.unit||""}</span></label>
+          <div class="row">
+            <select style="flex:1">${opts}</select>
+            <input type="number" min="${it.manualMin}" max="${it.manualMax}" step="${it.manualStep}" style="${showManual?"":"display:none"}">
+          </div><div class="hint">${sub(L.hint||"")}</div>${effHtml}`;
+        ctn.appendChild(d);
+        const sel=d.querySelector("select"), num=d.querySelector("input[type=number]");
+        if(showManual) num.value=state[it.manualField];
+        sel.addEventListener("change",e=>{ const o=it.options.find(x=>x.id===e.target.value); Object.assign(state,o.set); save(); buildUI(); render(); });
+        num.addEventListener("input",e=>{ const v=parseFloat(e.target.value); if(!isFinite(v))return; state[it.manualField]=v; save(); render(); });
+      } else {
+        d.innerHTML=`<label><span class="nm">${L.label}${symHtml}</span><span class="un">${it.unit||""}</span></label>
+          <div class="row">
+            <input type="range" min="${it.min}" max="${it.max}" step="${it.step}">
+            <input type="number" min="${it.min}" max="${it.max}" step="${it.step}">
+          </div><div class="hint">${sub(L.hint||"")}</div>${effHtml}`;
+        ctn.appendChild(d);
+        const rng=d.querySelector("input[type=range]"), num=d.querySelector("input[type=number]");
+        rng.value=state[it.key]; num.value=state[it.key];
+        const on=e=>{ const v=parseFloat(e.target.value); if(!isFinite(v))return; state[it.key]=v; rng.value=v; num.value=v; save(); render(); };
+        rng.addEventListener("input",on); num.addEventListener("input",on);
+      }
     });
   });
 
   const chDiv=document.getElementById("charts"); chDiv.innerHTML="";
   CHARTS.forEach(c=>{
-    const [title,cap]=c[lang];
+    const cap=c[lang][1];
     const card=document.createElement("div"); card.className="chart";
     card.innerHTML=`<canvas id="cv_${c.id}"></canvas><div class="eq">${sub(c.eq)}</div><div class="cap">${sub(cap)}</div>`;
     chDiv.appendChild(card); CV[c.id]=card.querySelector("canvas");
@@ -380,9 +537,13 @@ function render(){
   const out=Physics.computeAll(state), R=out.readout, ch=out.charts;
   const TT={}; CHARTS.forEach(c=>TT[c.id]=c[lang][0]); // per-chart title on the canvas
 
-  document.getElementById("readout").innerHTML = RO.map(r=>{
-    const cls = r.cls? r.cls(R):"";
-    return `<div class="ro"><div class="k">${sub(r[lang])}</div><div class="v ${cls}">${r.v(R,lang)}</div></div>`;
+  document.getElementById("readout").innerHTML = DERIVED.map(item=>{
+    const L=item[lang], cls=item.cls?item.cls(R):"";
+    const f=txt(L.f), c=txt(L.c), symHtml=item.sym?` <span class="sym">${item.sym}</span>`:"";
+    return `<div class="ro"><div class="k">${sub(L.k)}${symHtml}</div>`+
+           `<div class="v ${cls}">${item.v(R,lang)}</div>`+
+           (f?`<div class="f">${sub(f)}</div>`:"")+
+           (c?`<div class="c">${sub(c)}</div>`:"")+`</div>`;
   }).join("");
 
   const lo=Math.min(R.xBi||1e9,R.xUni||1e9), hi=Math.max(R.xBi||-1,R.xUni||-1);
