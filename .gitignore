@@ -1,9 +1,0 @@
-# OS / editor cruft
-.DS_Store
-Thumbs.db
-*~
-.vscode/
-.idea/
-
-# node (none required, but keep clean if anyone runs npm)
-node_modules/
